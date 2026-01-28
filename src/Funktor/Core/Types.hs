@@ -3,7 +3,7 @@ module Funktor.Core.Types where
 ------------------
 --    Time
 ------------------
-newtype Beat = Beat { unBeat :: Rational }
+newtype Beat = Beat {unBeat :: Rational}
     deriving (Eq, Ord, Show)
     deriving newtype (Num, Fractional)
 
@@ -11,11 +11,11 @@ newtype Beat = Beat { unBeat :: Rational }
 type Beats = Rational
 
 -- how long something lasts in beats
-newtype Duration = Duration { unDuration :: Beats }
+newtype Duration = Duration {unDuration :: Beats}
     deriving (Eq, Ord, Show)
     deriving newtype (Num, Fractional)
 
-newtype Tempo = Tempo { unTempo :: Double }
+newtype Tempo = Tempo {unTempo :: Double}
     deriving (Eq, Ord, Show)
     deriving newtype (Num, Fractional)
 
@@ -31,13 +31,12 @@ secondsToBeats :: Tempo -> Double -> Beats
 secondsToBeats (Tempo bpm) secs =
     toRational (secs * bpm / 60)
 
-
 -----------------------
 --      Pitch
 -----------------------
 
 -- Middle C is at 60
-newtype Pitch = Pitch { unPitch :: Int }
+newtype Pitch = Pitch {unPitch :: Int}
     deriving (Eq, Ord, Show)
     deriving newtype (Num, Enum)
 
@@ -53,7 +52,7 @@ freqToMidi freq = Pitch $ round $ 69 + 12 * logBase 2 (freq / 440)
 -----------------------
 --      Velocity
 -----------------------
-newtype Velocity = Velocity { unVelocity :: Double }
+newtype Velocity = Velocity {unVelocity :: Double}
     deriving (Eq, Ord, Show)
     deriving newtype (Num, Fractional)
 
@@ -67,7 +66,8 @@ velocityToAmplitude (Velocity v) = v * v
 data Event a = Event
     { eventBeat :: !Beat
     , eventValue :: !a
-    } deriving (Eq, Ord, Show, Functor)
+    }
+    deriving (Eq, Ord, Show, Functor)
 
 mapEventTime :: (Beat -> Beat) -> Event a -> Event a
 mapEventTime f (Event t v) = Event (f t) v
@@ -79,4 +79,5 @@ data Note = Note
     { notePitch :: !Pitch
     , noteDuration :: !Duration
     , noteVelocity :: !Velocity
-    } deriving (Eq, Show)
+    }
+    deriving (Eq, Show)
