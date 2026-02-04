@@ -19,6 +19,7 @@ common warnings
 library
     import:           warnings
     exposed-modules:  Funktor
+                      Funktor.Core.Pattern
                       Funktor.Core.Types
 
     other-extensions: RecordWildCards
