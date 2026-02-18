@@ -64,7 +64,7 @@ velocityToAmplitude (Velocity v) = v * v
 -----------------------
 
 data Event a = Event
-    { eventBeat :: !Beat
+    { eventBeat  :: !Beat
     , eventValue :: !a
     }
     deriving (Eq, Ord, Show, Functor)
@@ -76,8 +76,37 @@ mapEventValue :: (a -> b) -> Event a -> Event b
 mapEventValue = fmap
 
 data Note = Note
-    { notePitch :: !Pitch
+    { notePitch    :: !Pitch
     , noteDuration :: !Duration
     , noteVelocity :: !Velocity
     }
     deriving (Eq, Show)
+
+-----------------------
+-- Musical Structures
+-----------------------
+
+newtype ScaleDegree = ScaleDegree { unScaleDegree :: Int }
+    deriving (Eq, Ord, Show)
+    deriving newtype (Num, Enum)
+
+newtype Scale = Scale { scaleIntervals :: [Int] }
+    deriving (Eq, Show)
+
+-- Common Jazz Chords
+data ChordQuality
+    = Major7
+    | Minor7
+    | Dominant7
+    | HalfDiminished
+    | Diminished7
+    | Minor7Flat5
+    | Augmented
+    | Sus4
+    | Sus2
+    deriving (Eq, Show, Enum, Bounded)
+
+data ChordSymbol = ChordSymbol
+    { chordRoot    :: !Pitch
+    , chordQuality :: !ChordQuality
+    } deriving (Eq, Show)

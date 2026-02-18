@@ -20,6 +20,7 @@ library
     import:           warnings
     exposed-modules:  Funktor
                       Funktor.Core.Pattern
+                      Funktor.Core.Stream
                       Funktor.Core.Types
 
     other-extensions: RecordWildCards
