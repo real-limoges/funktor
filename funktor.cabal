@@ -19,12 +19,18 @@ common warnings
 library
     import:           warnings
     exposed-modules:  Funktor
+                      Funktor.Audio
                       Funktor.Core.Pattern
                       Funktor.Core.Stream
                       Funktor.Core.Types
+                      Funktor.Grid
+                      Funktor.Harmony
 
     other-extensions: RecordWildCards
     build-depends:    base ^>=4.21.0.0
+                    , sdl2 >= 2.5
+                    , stm >= 2.5
+                    , vector >= 0.12
     hs-source-dirs:   src
     default-language: GHC2024
 
