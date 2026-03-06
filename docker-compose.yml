@@ -1,0 +1,29 @@
+services:
+  dev:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/workspace
+      - cabal-cache:/root/.cabal
+    stdin_open: true
+    tty: true
+
+  test:
+    build:
+      context: .
+      target: builder
+    command: cabal test
+
+  run:
+    build:
+      context: .
+      target: runtime
+    devices:
+      - /dev/snd
+    environment:
+      - PULSE_SERVER=${PULSE_SERVER:-}
+      - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}
+
+volumes:
+  cabal-cache:

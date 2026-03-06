@@ -1,0 +1,4 @@
+dist-newstyle/
+.git/
+.idea/
+.claude/
