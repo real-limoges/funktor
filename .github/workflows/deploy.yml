@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    uses: real-limoges/real-complex/.github/workflows/deploy-service.yml@main
+    with:
+      service_name: funktor
+      service_account: funktor-runner@realcomplex-prod.iam.gserviceaccount.com
+    permissions:
+      contents: read
+      id-token: write
