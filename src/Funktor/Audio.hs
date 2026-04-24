@@ -1,13 +1,20 @@
 module Funktor.Audio
     ( openDevice
+    , closeDevice
+    , noteOn
+    , noteOff
     ) where
 
 import qualified SDL
 import qualified Data.Vector.Storable.Mutable as VM
+import Control.Monad (forM_)
+import Control.Concurrent.STM (TVar, newTVarIO)
+import Data.Int (Int8, Int16, Int32)
+import Data.Word (Word8, Word16)
+import Funktor.Core.Types (Pitch, Velocity)
+import Funktor.Audio.State (bufferSize)
 
--- | Open the default audio device configured for 44100 Hz mono float playback.
--- SDL fills each audio buffer by calling 'silenceCallback'.
-openDevice :: IO SDL.AudioDevice
+openDevice :: IO (SDL.AudioDevice, TVar ())
 openDevice = do
     SDL.initialize [SDL.InitAudio]
     (dev, _) <- SDL.openAudioDevice SDL.OpenDeviceSpec
@@ -17,26 +24,54 @@ openDevice = do
         , SDL.openDeviceSamples  = 512
         , SDL.openDeviceUsage    = SDL.ForPlayback
         , SDL.openDeviceName     = Nothing
-        , SDL.openDeviceCallback = silenceCallback
+        , SDL.openDeviceCallback = audioCallback
         }
+    stateVar <- newTVarIO ()
     SDL.setAudioDevicePlaybackState dev SDL.Play
-    pure dev
+    pure (dev, stateVar)
 
--- | Fill an audio buffer with zeros regardless of sample format.
--- Pattern-matches on the GADT 'SDL.AudioFormat' to learn the concrete
--- sample type 't' for each branch, which lets 'VM.set buf 0' type-check.
-silenceCallback :: SDL.AudioFormat t -> VM.IOVector t -> IO ()
-silenceCallback SDL.FloatingLEAudio        buf = VM.set buf 0
-silenceCallback SDL.FloatingBEAudio        buf = VM.set buf 0
-silenceCallback SDL.FloatingNativeAudio    buf = VM.set buf 0
-silenceCallback SDL.Signed8BitAudio        buf = VM.set buf 0
-silenceCallback SDL.Unsigned8BitAudio      buf = VM.set buf 0
-silenceCallback SDL.Signed16BitLEAudio     buf = VM.set buf 0
-silenceCallback SDL.Signed16BitBEAudio     buf = VM.set buf 0
-silenceCallback SDL.Signed16BitNativeAudio buf = VM.set buf 0
-silenceCallback SDL.Unsigned16BitLEAudio   buf = VM.set buf 0
-silenceCallback SDL.Unsigned16BitBEAudio   buf = VM.set buf 0
-silenceCallback SDL.Unsigned16BitNativeAudio buf = VM.set buf 0
-silenceCallback SDL.Signed32BitLEAudio     buf = VM.set buf 0
-silenceCallback SDL.Signed32BitBEAudio     buf = VM.set buf 0
-silenceCallback SDL.Signed32BitNativeAudio buf = VM.set buf 0
+closeDevice :: SDL.AudioDevice -> IO ()
+closeDevice = SDL.closeAudioDevice
+
+noteOn :: TVar () -> Pitch -> Velocity -> IO ()
+noteOn _ _ _ = pure ()
+
+noteOff :: TVar () -> Pitch -> IO ()
+noteOff _ _ = pure ()
+
+audioCallback :: SDL.AudioFormat t -> VM.IOVector t -> IO ()
+audioCallback fmt buf = do
+    let n = bufferSize
+    case fmt of
+        SDL.FloatingLEAudio        -> fillFloat buf n
+        SDL.FloatingBEAudio        -> fillFloat buf n
+        SDL.FloatingNativeAudio    -> fillFloat buf n
+        SDL.Signed8BitAudio        -> fillInt8 buf n
+        SDL.Unsigned8BitAudio      -> fillUint8 buf n
+        SDL.Signed16BitLEAudio     -> fillInt16 buf n
+        SDL.Signed16BitBEAudio     -> fillInt16 buf n
+        SDL.Signed16BitNativeAudio -> fillInt16 buf n
+        SDL.Unsigned16BitLEAudio   -> fillUint16 buf n
+        SDL.Unsigned16BitBEAudio   -> fillUint16 buf n
+        SDL.Unsigned16BitNativeAudio -> fillUint16 buf n
+        SDL.Signed32BitLEAudio     -> fillInt32 buf n
+        SDL.Signed32BitBEAudio     -> fillInt32 buf n
+        SDL.Signed32BitNativeAudio -> fillInt32 buf n
+
+fillFloat :: VM.IOVector Float -> Int -> IO ()
+fillFloat buf n = forM_ [0 .. n-1] $ \i -> VM.write buf i 0.0
+
+fillInt8 :: VM.IOVector Int8 -> Int -> IO ()
+fillInt8 buf n = forM_ [0 .. n-1] $ \i -> VM.write buf i 0
+
+fillUint8 :: VM.IOVector Word8 -> Int -> IO ()
+fillUint8 buf n = forM_ [0 .. n-1] $ \i -> VM.write buf i 0
+
+fillInt16 :: VM.IOVector Int16 -> Int -> IO ()
+fillInt16 buf n = forM_ [0 .. n-1] $ \i -> VM.write buf i 0
+
+fillUint16 :: VM.IOVector Word16 -> Int -> IO ()
+fillUint16 buf n = forM_ [0 .. n-1] $ \i -> VM.write buf i 0
+
+fillInt32 :: VM.IOVector Int32 -> Int -> IO ()
+fillInt32 buf n = forM_ [0 .. n-1] $ \i -> VM.write buf i 0
