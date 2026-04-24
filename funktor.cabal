@@ -20,14 +20,35 @@ library
     import:           warnings
     exposed-modules:  Funktor
                       Funktor.Audio
+                      Funktor.Audio.State
+                      Funktor.Audio.Envelope
+                      Funktor.Audio.Effects
+                      Funktor.Audio.Oscillator
+                      Funktor.Audio.Scheduler
+                      Funktor.Audio.Voice
+                      Funktor.Audio.Sine
                       Funktor.Core.Pattern
                       Funktor.Core.Stream
                       Funktor.Core.Types
+                      Funktor.Generative.CellularAutomata
+                      Funktor.Generative.Euclidean
+                      Funktor.Generative.Markov
                       Funktor.Grid
+                      Funktor.Grid.Binding
                       Funktor.Harmony
+                      Funktor.Harmony.Analysis
+                      Funktor.Harmony.Voicing
+                      Funktor.Hardware.Launchpad
+                      Funktor.Hardware.MIDI
+                      Funktor.Live
+                      Funktor.Live.Reload
+                      Funktor.Live.Session
+                      Funktor.UI
 
     other-extensions: RecordWildCards
-    build-depends:    base ^>=4.21.0.0
+    build-depends:    base >= 4.21 && < 4.23
+                    , containers >= 0.6
+                    , random >= 1.2
                     , sdl2 >= 2.5
                     , stm >= 2.5
                     , vector >= 0.12
@@ -40,7 +61,7 @@ executable funktor
     other-extensions: RecordWildCards
 
     build-depends:
-        base ^>=4.21.0.0,
+        base >= 4.21 && < 4.23,
         funktor
 
     hs-source-dirs:   app
@@ -49,10 +70,12 @@ executable funktor
 test-suite funktor-test
     import:           warnings
     default-language: GHC2024
-    other-extensions: RecordWildCards
+    other-extensions: RecordWildCards, ScopedTypeVariables
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
-        base ^>=4.21.0.0,
-        funktor
+        base >= 4.21 && < 4.23,
+        funktor,
+        HUnit >= 1.6,
+        vector >= 0.12

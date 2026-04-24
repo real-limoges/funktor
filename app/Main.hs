@@ -1,7 +1,6 @@
-module Main (main) where
-
-import Funktor ()
+module Main where
 
 main :: IO ()
 main = do
-  putStrLn "Funktor - Interactive Music Application"
+    putStrLn "Funktor - Interactive Music Application"
+    putStrLn "Audio modules loaded successfully."

@@ -93,11 +93,12 @@ repeat_ n pat
 --------------------
 -- Common Patterns
 --------------------
+-- Common Patterns
+--------------------
 
 pentatonic :: Octave -> Pattern Note
 pentatonic oct =
-    let pitches = [0, 3, 5, 7, 10] -- Minor pentatonic intervals
-        baseNote = 60 + (oct -4) * 12 -- C in the octave
-        makeNote i p = Event (Beat $ fromIntegral i)
-                             (Note (Pitch $ baseNote + p) 1 0.7)
+    let pitches = [0, 3, 5, 7, 10 :: Int]
+        baseNote = (60 + (oct - 4) * 12) :: Int
+        makeNote (i :: Int) p = Event (Beat (fromIntegral i)) (Note (Pitch (baseNote + p)) 1 0.7)
     in Pattern (zipWith makeNote [0..] pitches) 5

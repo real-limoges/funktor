@@ -104,9 +104,9 @@ data ChordQuality
     | Augmented
     | Sus4
     | Sus2
-    deriving (Eq, Show, Enum, Bounded)
+    deriving (Eq, Ord, Show, Enum, Bounded)
 
 data ChordSymbol = ChordSymbol
     { chordRoot    :: !Pitch
     , chordQuality :: !ChordQuality
-    } deriving (Eq, Show)
+    } deriving (Eq, Ord, Show)

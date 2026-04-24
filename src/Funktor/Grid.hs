@@ -45,28 +45,30 @@ data Grid = Grid
 
 -- | Create a blank grid with every pad set to 'NoAction' and 'Off'.
 emptyGrid :: Int -> Int -> Grid
-emptyGrid w h = Grid
-    { gridPads   = replicate h (replicate w (Pad NoAction Off))
-    , gridWidth  = w
-    , gridHeight = h
-    }
+emptyGrid w h = Grid (replicate h (replicate w (Pad NoAction Off))) w h
 
--- | Return a new 'Grid' with the pad at (x, y) replaced.
--- Out-of-bounds writes are silently ignored.
 setPad :: Int -> Int -> Pad -> Grid -> Grid
 setPad x y pad g
     | x < 0 || y < 0 || x >= gridWidth g || y >= gridHeight g = g
-    | otherwise = g { gridPads = newPads }
-  where
-    newPads =
-        [ if row == y
-            then [ if col == x then pad else p | (col, p) <- zip [0..] r ]
-            else r
-        | (row, r) <- zip [0..] (gridPads g)
-        ]
+    | otherwise = g { gridPads = updateRow y (updateCell x pad) (gridPads g) }
 
--- | Look up the pad at (x, y). Returns 'Nothing' for out-of-bounds indices.
+updateCell :: Int -> Pad -> [Pad] -> [Pad]
+updateCell x pad row = zipWith (\i p -> if i == x then pad else p) [0..] row
+
+updateRow :: Int -> ([Pad] -> [Pad]) -> [[Pad]] -> [[Pad]]
+updateRow y f rows = zipWith (\i r -> if i == y then f r else r) [0..] rows
+
 getPad :: Int -> Int -> Grid -> Maybe Pad
 getPad x y g
     | x < 0 || y < 0 || x >= gridWidth g || y >= gridHeight g = Nothing
-    | otherwise = Just (gridPads g !! y !! x)
+    | otherwise = getNested (gridPads g) y x
+  where
+    getNested :: [[Pad]] -> Int -> Int -> Maybe Pad
+    getNested [] _ _ = Nothing
+    getNested (r:_) 0 x' = safeIndex r x'
+    getNested (_:rs) i x' = getNested rs (i - 1) x'
+
+    safeIndex :: [b] -> Int -> Maybe b
+    safeIndex [] _ = Nothing
+    safeIndex (x':_) 0 = Just x'
+    safeIndex (_:xs) n = safeIndex xs (n - 1)
