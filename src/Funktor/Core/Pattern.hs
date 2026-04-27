@@ -34,7 +34,7 @@ singleton :: Duration -> a -> Pattern a
 singleton dur a = Pattern [Event 0 a] dur
 
 rest :: Duration -> Pattern a
-rest = Pattern []
+rest dur = Pattern [] dur
 
 note :: Pitch -> Duration -> Velocity -> Pattern Note
 note p d v = singleton d (Note p d v)
