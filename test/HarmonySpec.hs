@@ -3,7 +3,7 @@ module HarmonySpec (tests) where
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, assertBool)
 import Funktor.Harmony
-import Funktor.Core.Types (Pitch(..))
+import Funktor.Core.Types (ChordQuality(..))
 
 -- Example intervals for each quality (simplified)
 expectedIntervals :: ChordQuality -> [Int]
@@ -16,13 +16,12 @@ expectedIntervals Minor7Flat5 = [0,3,6,10]
 expectedIntervals Augmented    = [0,4,8]
 expectedIntervals Sus4         = [0,5,7]
 expectedIntervals Sus2         = [0,2,7]
-expectedIntervals _            = []
 
 tests :: TestTree
 tests = testGroup "Harmony"
   [ testCase "quality intervals match expectations" $ do
         let allQuals = [minBound .. maxBound] :: [ChordQuality]
-        mapM_ (\q -> let got = qualityIntervals q
-                     expc = expectedIntervals q
-                 in assertBool ("intervals for " ++ show q) (got == expc)) allQuals
+        mapM_ (\q -> let got  = qualityIntervals q
+                         expc = expectedIntervals q
+                     in assertBool ("intervals for " ++ show q) (got == expc)) allQuals
   ]

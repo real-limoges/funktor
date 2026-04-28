@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
-import Test.Tasty (defaultMain, testGroup, TestTree)
+import Test.Tasty (defaultMain, testGroup)
 
 -- Core
 import qualified Core.TypesSpec as CoreTypes

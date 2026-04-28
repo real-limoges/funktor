@@ -11,10 +11,11 @@ module Funktor.Audio
       ) where
 
 import qualified SDL
-import Control.Concurrent.STM (TVar     , atomically, modifyTVar', readTVarIO, newTVarIO)
-import Funktor.Core.Types (Pitch(..), Velocity(..), midiToFreq, velocityToAmplitude)
+import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO)
+import Funktor.Core.Types (Pitch, Velocity)
 import Funktor.Audio.State
 import Funktor.Audio.Sine
+import Funktor.Audio.Voice (poolNoteOn, poolNoteOff)
 
 openDevice :: IO (SDL.AudioDevice, TVar AudioState)
 openDevice = do
@@ -40,15 +41,6 @@ noteOn stateVar pitch vel = atomically $ modifyTVar' stateVar $ \s ->
   s { audioPool = poolNoteOn (audioTime s) pitch vel (audioPool s) }
 
 noteOff :: TVar AudioState -> Pitch -> IO ()
-noteOff stateVar _pitch = atomically $ modifyTVar' stateVar $ \s ->
-  s { audioNoteOffAt = Just (audioTime s)
-    , audioPlaying = False
-    }
-
-
-noteOff :: TVar AudioState -> Pitch -> IO ()
-noteOff stateVar _pitch = atomically $ modifyTVar' stateVar $ \s ->
-  s { audioNoteOffAt = Just (audioTime s)
-    , audioPlaying = False
-    }
+noteOff stateVar pitch = atomically $ modifyTVar' stateVar $ \s ->
+  s { audioPool = poolNoteOff (audioTime s) pitch (audioPool s) }
 

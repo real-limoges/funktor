@@ -4,7 +4,7 @@ module Funktor.Audio.Sine
 where
 
 import Control.Concurrent.STM (TVar, atomically, modifyTVar', readTVarIO)
-import Control.Monad (foldM, forM_)
+import Control.Monad (forM_)
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable.Mutable as VM
 import qualified SDL
@@ -32,7 +32,7 @@ sineCallback stateVar SDL.FloatingLEAudio buf = do
                                     amp = velocityToAmplitude (voiceVelocity v)
                                     ph = voicePhase v
                                     sample = amp * env * sin (2 * pi * ph)
-                                in acc + realToFrac sample) 0.0 (poolVoices pool)
+                                in acc + sample) (0.0 :: Double) (poolVoices pool)
             out = realToFrac (total / fromIntegral maxVoices) :: Float
         VM.write buf i out
     -- Advance phases for all voices
@@ -44,4 +44,4 @@ sineCallback stateVar SDL.FloatingLEAudio buf = do
     -- Cleanup finished voices each buffer
     atomically $ modifyTVar' stateVar $ \s ->
         s { audioPool = cleanupVoices (audioEnvelope s) (audioTime s) (audioPool s) }
-
+sineCallback _ _ _ = pure ()
