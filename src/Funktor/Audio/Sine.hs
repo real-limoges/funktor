@@ -1,50 +1,47 @@
 {-# LANGUAGE RecordWildCards #-}
-module Funktor.Audio.Sine where
+module Funktor.Audio.Sine
+        (sineCallback)
+where
 
-import Funktor.Audio.State
-import Control.Concurrent.STM (TVar, atomically, readTVarIO, modifyTVar')
-import qualified SDL
+import Control.Concurrent.STM (TVar, atomically, modifyTVar', readTVarIO)
+import Control.Monad (forM_)
+import qualified Data.Vector as V
 import qualified Data.Vector.Storable.Mutable as VM
-
-data OscState = OscState
-    { oscFreq      :: !Double
-    , oscPhase     :: !Double
-    , oscAmplitude :: !Double
-    } deriving (Show)
-
-data AudioState = AudioState
-    { audioOsc :: !OscState
-    , audioPlaying :: !Bool
-    } deriving (Show)
+import qualified SDL
+import Data.Fixed (mod')
+import Funktor.Audio.State
+import Funktor.Audio.Voice
+import Funktor.Audio.Envelope (envelopeAmplitude)
+import Funktor.Core.Types (velocityToAmplitude)
 
 sineCallback :: TVar AudioState -> SDL.AudioFormat t -> VM.IOVector t -> IO ()
 sineCallback stateVar SDL.FloatingLEAudio buf = do
     st <- readTVarIO stateVar
-    let OscState{..} = audioOsc st
+    let pool = audioPool st
         len = VM.length buf
-        phaseInc = oscFreq / sampleRate
-        (finalPhase, _) =
-            foldl
-                ( \ (ph, i) _ ->
-                    let ph'
-                            | ph + phaseInc >= 1.0 = ph + phaseInc - 1.0
-                            | otherwise = ph + phaseInc
-                     in (ph', (i :: Int) + 1)
-                )
-                (oscPhase, (0 :: Int))
-                [0 .. len - 1 :: Int]
+        rate = sampleRate
+        baseT = audioTime st
+    -- Fill buffer by summing all active voices per sample
+    forM_ [0 .. len - 1] $ \i -> do
+        let t = baseT + fromIntegral i / rate
+            total = V.foldl' (\acc maybeV ->
+                        case maybeV of
+                            Nothing -> acc
+                            Just v ->
+                                let env = envelopeAmplitude (audioEnvelope st) (voiceNoteOnAt v) (voiceNoteOffAt v) t
+                                    amp = velocityToAmplitude (voiceVelocity v)
+                                    ph = voicePhase v
+                                    sample = amp * env * sin (2 * pi * ph)
+                                in acc + sample) (0.0 :: Double) (poolVoices pool)
+            out = realToFrac (total / fromIntegral maxVoices) :: Float
+        VM.write buf i out
+    -- Advance phases for all voices
+    let advance v = v { voicePhase = (voicePhase v + (voiceFreq v / rate) * fromIntegral len) `mod'` 1.0 }
+        newVoices = V.map (fmap advance) (poolVoices pool)
     atomically $ modifyTVar' stateVar $ \s ->
-        s { audioOsc = (audioOsc s) { oscPhase = finalPhase } }
-
+        s { audioPool = (audioPool s) { poolVoices = newVoices }
+          , audioTime = audioTime s + fromIntegral len / rate }
+    -- Cleanup finished voices each buffer
+    atomically $ modifyTVar' stateVar $ \s ->
+        s { audioPool = cleanupVoices (audioEnvelope s) (audioTime s) (audioPool s) }
 sineCallback _ _ _ = pure ()
-
-createAudioState :: Double -> Double -> AudioState
-createAudioState freq amp =
-    AudioState
-        { audioOsc = OscState oscFreq oscPhase oscAmplitude
-        , audioPlaying = False
-        }
-  where
-    oscFreq = freq
-    oscPhase = 0.0
-    oscAmplitude = amp

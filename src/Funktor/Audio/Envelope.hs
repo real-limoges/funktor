@@ -1,5 +1,5 @@
 module Funktor.Audio.Envelope
-    ( EnvelopeParams (..)
+    ( EnvelopeParams(..)
     , defaultEnvelope
     , envelopeAmplitude
     ) where
@@ -22,29 +22,46 @@ defaultEnvelope = EnvelopeParams
 envelopeAmplitude :: EnvelopeParams -> Double -> Maybe Double -> Double -> Double
 envelopeAmplitude params noteOnTime maybeNoteOffTime currentTime
     | currentTime < noteOnTime = 0
-    | otherwise =
-        let attackEnd = noteOnTime + envAttack params
-            decayEnd = attackEnd + envDecay params
-            releaseDur = envRelease params
-        in if currentTime < attackEnd
-               then let t = (currentTime - noteOnTime) / envAttack params
-                    in t
-               else case maybeNoteOffTime of
-                   Nothing ->
-                       if currentTime < decayEnd
-                           then let t = (currentTime - attackEnd) / envDecay params
-                                in 1 - (1 - envSustain params) * t
-                           else envSustain params
-                   Just noteOffTime ->
-                       let relStart = max noteOffTime (noteOnTime + envAttack params + envDecay params)
-                           relDur = currentTime - relStart
-                           relEnd = relStart + releaseDur
-                       in if currentTime < noteOffTime
-                              then if currentTime < decayEnd
-                                       then let t = (currentTime - attackEnd) / envDecay params
-                                            in 1 - (1 - envSustain params) * t
-                                       else envSustain params
-                              else if currentTime < relEnd
-                                       then let t = relDur / releaseDur
-                                            in envSustain params * (1 - t)
-                                       else 0
+    | otherwise = case maybeNoteOffTime of
+        Nothing -> amplitudeBeforeRelease params noteOnTime currentTime
+        Just noteOffTime -> amplitudeWithRelease params noteOnTime noteOffTime currentTime
+  where
+    -- | Helper for the case where the note has not been released yet.
+    amplitudeBeforeRelease :: EnvelopeParams -> Double -> Double -> Double
+    amplitudeBeforeRelease p on t
+        | t < attackEnd = attackAmp p on t
+        | t < decayEnd  = decayAmp p on t
+        | otherwise     = envSustain p
+      where
+        attackEnd = on + envAttack p
+        decayEnd  = attackEnd + envDecay p
+
+    -- | Helper for the case where the note has been released.
+    amplitudeWithRelease :: EnvelopeParams -> Double -> Double -> Double -> Double
+    amplitudeWithRelease p on off t
+        | t < attackEnd = attackAmp p on t
+        | t < decayEnd  = decayAmp p on t
+        | t < off        = envSustain p
+        | t < relEnd    = releaseAmp p on off t
+        | otherwise     = 0
+      where
+        attackEnd = on + envAttack p
+        decayEnd  = attackEnd + envDecay p
+        relStart  = max off (on + envAttack p + envDecay p)
+        relEnd    = relStart + envRelease p
+
+    -- | Attack phase amplitude (linear rise from 0 to 1).
+    attackAmp :: EnvelopeParams -> Double -> Double -> Double
+    attackAmp p on t = (t - on) / envAttack p
+
+    -- | Decay phase amplitude (linear fall from 1 to sustain level).
+    decayAmp :: EnvelopeParams -> Double -> Double -> Double
+    decayAmp p on t =
+        1 - (1 - envSustain p) * ((t - (on + envAttack p)) / envDecay p)
+
+    -- | Release phase amplitude (linear fall from sustain to 0).
+    releaseAmp :: EnvelopeParams -> Double -> Double -> Double -> Double
+    releaseAmp p on off t =
+        let relStart = max off (on + envAttack p + envDecay p)
+            relDur   = t - relStart
+        in envSustain p * (1 - relDur / envRelease p)
