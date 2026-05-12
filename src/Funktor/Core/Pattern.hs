@@ -6,8 +6,8 @@ Building blocks to form emergent music.
 module Funktor.Core.Pattern
 where
 
-import Funktor.Core.Types
 import Data.List (sortOn)
+import Funktor.Core.Types
 
 ----------------
 --  Patterns
@@ -65,8 +65,9 @@ shift offset (Pattern evts dur) =
 
 scale :: Rational -> Pattern a -> Pattern a
 scale factor (Pattern evts dur) =
-    Pattern (map (mapEventTime (* Beat factor)) evts)
-            (dur * Duration factor)
+    Pattern
+        (map (mapEventTime (* Beat factor)) evts)
+        (dur * Duration factor)
 
 mapEvents :: (Event a -> Event b) -> Pattern a -> Pattern b
 mapEvents f (Pattern evts dur) = Pattern (map f evts) dur
@@ -76,8 +77,9 @@ filterEvents p (Pattern evts dur) = Pattern (filter p evts) dur
 
 append :: Pattern a -> Pattern a -> Pattern a
 append (Pattern evts1 dur1) (Pattern evts2 dur2) =
-    Pattern (evts1 ++ map (mapEventTime (+ Beat (unDuration dur1))) evts2)
-            (dur1 + dur2)
+    Pattern
+        (evts1 ++ map (mapEventTime (+ Beat (unDuration dur1))) evts2)
+        (dur1 + dur2)
 
 stack :: Pattern a -> Pattern a -> Pattern a
 stack (Pattern evts1 dur1) (Pattern evts2 dur2) =
@@ -93,12 +95,13 @@ repeat_ n pat
 --------------------
 -- Common Patterns
 --------------------
--- Common Patterns
---------------------
+
+pentatonicIntervals :: [Int]
+pentatonicIntervals = [0, 3, 5, 7, 10]
 
 pentatonic :: Octave -> Pattern Note
-pentatonic oct =
-    let pitches = [0, 3, 5, 7, 10 :: Int]
-        baseNote = (60 + (oct - 4) * 12) :: Int
-        makeNote (i :: Int) p = Event (Beat (fromIntegral i)) (Note (Pitch (baseNote + p)) 1 0.7)
-    in Pattern (zipWith makeNote [0..] pitches) 5
+pentatonic oct = Pattern (zipWith stepNote [0 :: Int ..] pentatonicIntervals) 5
+  where
+    baseMidi = 60 + (oct - 4) * 12
+    stepNote i interval =
+        Event (Beat (fromIntegral i)) (Note (Pitch (baseMidi + interval)) 1 0.7)

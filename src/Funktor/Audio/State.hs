@@ -1,14 +1,15 @@
 {-# LANGUAGE RecordWildCards #-}
-module Funktor.Audio.State
-    ( AudioState(..)
-    , OscState(..)
-    , sampleRate
-    , bufferSize
-    , createSineAudioState
-    ) where
 
-import Funktor.Audio.Voice (VoicePool, emptyPool)
+module Funktor.Audio.State (
+    AudioState (..),
+    OscState (..),
+    sampleRate,
+    bufferSize,
+    createSineAudioState,
+) where
+
 import Funktor.Audio.Envelope (EnvelopeParams, defaultEnvelope)
+import Funktor.Audio.Voice (VoicePool, emptyPool)
 
 sampleRate :: Double
 sampleRate = 44100
@@ -17,21 +18,29 @@ bufferSize :: Int
 bufferSize = 512
 
 data OscState = OscState
-    { oscFreq      :: !Double
-    , oscPhase     :: !Double
+    { oscFreq :: !Double
+    , oscPhase :: !Double
     , oscAmplitude :: !Double
-    } deriving (Show)
+    }
+    deriving (Show)
 
 data AudioState = AudioState
-    { audioPool      :: !VoicePool
+    { audioOsc :: !OscState
     , audioEnvelope :: !EnvelopeParams
-    , audioTime     :: !Double
-    } deriving (Show)
+    , audioNoteOnAt :: !(Maybe Double)
+    , audioNoteOffAt :: !(Maybe Double)
+    , audioTime :: !Double
+    , audioPool :: !VoicePool
+    }
+    deriving (Show)
 
 createSineAudioState :: Double -> Double -> AudioState
-createSineAudioState _freq _amp =
+createSineAudioState freq amp =
     AudioState
-    { audioPool = emptyPool
-    , audioEnvelope = defaultEnvelope
-    , audioTime = 0.0
-    }
+        { audioOsc = OscState freq 0.0 amp
+        , audioEnvelope = defaultEnvelope
+        , audioNoteOnAt = Nothing
+        , audioNoteOffAt = Nothing
+        , audioTime = 0.0
+        , audioPool = emptyPool
+        }
