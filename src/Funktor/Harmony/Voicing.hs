@@ -1,16 +1,16 @@
-module Funktor.Harmony.Voicing
-    ( VoicingType (..)
-    , PitchRange (..)
-    , Voicing
-    , inversions
-    , applyDrop
-    , inRange
-    , allVoicings
-    , voiceLeadingCost
-    , bestVoicing
-    , voiceLead
-    , voicingToNotes
-    ) where
+module Funktor.Harmony.Voicing (
+    VoicingType (..),
+    PitchRange (..),
+    Voicing,
+    inversions,
+    applyDrop,
+    inRange,
+    allVoicings,
+    voiceLeadingCost,
+    bestVoicing,
+    voiceLead,
+    voicingToNotes,
+) where
 
 import Funktor.Core.Types
 
@@ -18,9 +18,10 @@ data VoicingType = ClosePosition | Drop2 | Drop3
     deriving (Eq, Show, Enum, Bounded)
 
 data PitchRange = PitchRange
-    { rangeLow  :: !Pitch
+    { rangeLow :: !Pitch
     , rangeHigh :: !Pitch
-    } deriving (Eq, Show)
+    }
+    deriving (Eq, Show)
 
 type Voicing = [Pitch]
 
