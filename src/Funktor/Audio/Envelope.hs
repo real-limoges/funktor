@@ -20,7 +20,8 @@ envelopeAmplitude (EnvelopeParams a d s r) on offMaybe t
     | t < on = 0
     | t < attackEnd = (t - on) / a
     | t < decayEnd = 1 - (1 - s) * ((t - attackEnd) / d)
-    | Just off <- offMaybe, t >= off =
+    | Just off <- offMaybe
+    , t >= off =
         let relStart = max off decayEnd
             relEnd = relStart + r
          in if t < relEnd then s * (1 - (t - relStart) / r) else 0

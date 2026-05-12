@@ -1,11 +1,20 @@
--- | GHCi Live Interface for Funktor
--- Provides interactive music control from GHCi using atomic stream swapping
-module Funktor.Live
-    ( play, stop, setTempo
+{- | GHCi Live Interface for Funktor
+Provides interactive music control from GHCi using atomic stream swapping
+-}
+module Funktor.Live (
+    play,
+    stop,
+    setTempo,
+
     -- * Re-exports for convenient GHCi usage
-    , Stream, Note, Tempo(..)
-    , fromPattern, pentatonic, silence, merge
-    ) where
+    Stream,
+    Note,
+    Tempo (..),
+    fromPattern,
+    pentatonic,
+    silence,
+    merge,
+) where
 
 import Control.Concurrent (ThreadId, forkIO, killThread)
 import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO, writeTVar)
@@ -32,7 +41,7 @@ data LiveState = LiveState
     , liveSchedVar :: !(TVar SchedulerState) -- scheduler's own state
     , liveAudioVar :: !(TVar AudioState) -- the voice pool
     , liveThreadId :: !(Maybe ThreadId) -- scheduler thread (Nothing = stopped)
-    , liveDevice   :: SDL.AudioDevice      -- audio device handle
+    , liveDevice :: SDL.AudioDevice -- audio device handle
     }
 
 {- | Play a stream of notes in the live session
@@ -51,14 +60,17 @@ bootSession stream = do
     startTime <- getMonotonicTime
     schedVar <- newTVarIO (initialSchedulerState stream (Tempo 120) startTime)
     tid <- forkIO (schedulerThread audioVar schedVar)
-    atomically $ writeTVar globalLive $ Just LiveState
-        { liveStream = stream
-        , liveTempo = Tempo 120
-        , liveSchedVar = schedVar
-        , liveAudioVar = audioVar
-        , liveThreadId = Just tid
-        , liveDevice = dev
-        }
+    atomically $
+        writeTVar globalLive $
+            Just
+                LiveState
+                    { liveStream = stream
+                    , liveTempo = Tempo 120
+                    , liveSchedVar = schedVar
+                    , liveAudioVar = audioVar
+                    , liveThreadId = Just tid
+                    , liveDevice = dev
+                    }
 
 hotSwap :: LiveState -> Stream Note -> IO ()
 hotSwap st stream = atomically $ do

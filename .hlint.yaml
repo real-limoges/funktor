@@ -1,0 +1,9 @@
+# HLint configuration. https://github.com/ndmitchell/hlint
+#
+# Rules in this file override defaults. Per-module exceptions live as
+# {-# HLINT ignore "RuleName" #-} pragmas at the top of the affected module
+# (preferred for narrow scope).
+
+# Project-specific ignores (none yet — add here if a rule starts firing
+# across many files for the same intentional reason).
+- ignore: {}

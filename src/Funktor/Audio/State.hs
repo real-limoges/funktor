@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Funktor.Audio.State (
     AudioState (..),
     OscState (..),

@@ -1,11 +1,11 @@
 module Audio.SineSpec (tests) where
 
 import Control.Concurrent.STM (newTVarIO)
-import qualified Data.Vector.Storable as VS
-import qualified Data.Vector.Storable.Mutable as VM
+import Data.Vector.Storable qualified as VS
+import Data.Vector.Storable.Mutable qualified as VM
 import Funktor.Audio (sineCallback)
 import Funktor.Audio.State (bufferSize, createSineAudioState)
-import qualified SDL
+import SDL qualified
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase)
 

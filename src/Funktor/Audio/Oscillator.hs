@@ -42,4 +42,4 @@ oscillate Square phase dt = squareBLEP phase dt
 oscillate Triangle phase _ =
     if phase < 0.5
         then 4.0 * phase - 1.0
-        else -4.0 * phase + 3.0
+        else -(4.0 * phase) + 3.0
