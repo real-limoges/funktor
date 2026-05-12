@@ -78,8 +78,12 @@ test-suite funktor-test
                       Core.TypesSpec
                       Core.PatternSpec
                       Core.StreamSpec
+                      Audio.AudioSpec
+                      Audio.EffectsSpec
                       Audio.EnvelopeSpec
                       Audio.OscillatorSpec
+                      Audio.SchedulerSpec
+                      Audio.SineSpec
                       Audio.StateSpec
                       Audio.VoiceSpec
                       Audio.SineSpec

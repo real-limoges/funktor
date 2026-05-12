@@ -1,10 +1,9 @@
 module Funktor.Core.Stream where
 
+import Funktor.Core.Pattern (Pattern (..))
 import Funktor.Core.Types
-import Funktor.Core.Pattern (Pattern(..))
 
 import Data.List (sortOn)
-
 
 -- I'm representing Streams as functions from a time range to events
 -- it's better than infinite lists when I only use events in a
@@ -18,33 +17,27 @@ instance Functor Stream where
     fmap f (Stream query_) = Stream $ \t0 t1 ->
         map (fmap f) (query_ t0 t1)
 
-
 -- Construct streams
 fromPattern :: Pattern a -> Stream a
 fromPattern (Pattern evts (Duration dur))
     | dur <= 0 = silence
-    | otherwise = Stream query_
-  where
-    query_ (Beat t0) (Beat t1) =
-        let
-            startLoop = floor (t0 / dur) :: Integer
-            endLoop = ceiling (t1 / dur ) :: Integer
-
-            loopEvents loopNum = 
-                let offset = fromIntegral loopNum * dur
-                in [ Event (Beat $ offset + unBeat b) v
-                    | Event b v <- evts
-                    , let absTime = offset + unBeat b
-                    , absTime >= t0
-                    , absTime < t1
-                    ]
-        in concatMap loopEvents [startLoop .. endLoop - 1]
-
+    | otherwise = Stream $ \(Beat t0) (Beat t1) ->
+        let startLoop = floor (t0 / dur) :: Integer
+            endLoop = ceiling (t1 / dur) :: Integer
+            eventsInCycle loopNum =
+                [ Event (Beat absTime) v
+                | Event b v <- evts
+                , let absTime = fromIntegral loopNum * dur + unBeat b
+                , absTime >= t0
+                , absTime < t1
+                ]
+         in concatMap eventsInCycle [startLoop .. endLoop - 1]
 
 -- create a stream from a list
 fromList :: [Event a] -> Stream a
 fromList evts = Stream $ \(Beat t0) (Beat t1) ->
-    [ e | e@(Event (Beat t) _) <- sortedEvts
+    [ e
+    | e@(Event (Beat t) _) <- sortedEvts
     , t >= t0
     , t < t1
     ]

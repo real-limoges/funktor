@@ -1,38 +1,49 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+
 module Main (main) where
 
 import Test.Tasty (defaultMain, testGroup)
 
 -- Core
-import qualified Core.TypesSpec as CoreTypes
-import qualified Core.PatternSpec as CorePattern
-import qualified Core.StreamSpec as CoreStream
+
+import Core.PatternSpec qualified as CorePattern
+import Core.StreamSpec qualified as CoreStream
+import Core.TypesSpec qualified as CoreTypes
 
 -- Audio
-import qualified Audio.EnvelopeSpec as AudioEnvelope
-import qualified Audio.OscillatorSpec as AudioOscillator
-import qualified Audio.StateSpec as AudioState
-import qualified Audio.VoiceSpec as AudioVoice
-import qualified Audio.SineSpec as AudioSine
+import Audio.AudioSpec qualified as AudioTop
+import Audio.EffectsSpec qualified as AudioEffects
+import Audio.EnvelopeSpec qualified as AudioEnvelope
+import Audio.OscillatorSpec qualified as AudioOscillator
+import Audio.SchedulerSpec qualified as AudioScheduler
+import Audio.SineSpec qualified as AudioSine
+import Audio.StateSpec qualified as AudioState
+import Audio.VoiceSpec qualified as AudioVoice
 
 -- Pure domains
-import qualified GridSpec as Grid
-import qualified HarmonySpec as Harmony
-import qualified LiveSpec as Live
-import qualified HardwareSpec as Hardware
+import GridSpec qualified as Grid
+import HardwareSpec qualified as Hardware
+import HarmonySpec qualified as Harmony
+import LiveSpec qualified as Live
 
 main :: IO ()
-main = defaultMain $ testGroup "Funktor test suite"
-  [ CoreTypes.tests
-  , CorePattern.tests
-  , CoreStream.tests
-  , AudioEnvelope.tests
-  , AudioOscillator.tests
-  , AudioState.tests
-  , AudioVoice.tests
-  , AudioSine.tests
-  , Grid.tests
-  , Harmony.tests
-  , Live.tests
-  , Hardware.tests
-  ]
+main =
+    defaultMain $
+        testGroup
+            "Funktor test suite"
+            [ CoreTypes.tests
+            , CorePattern.tests
+            , CoreStream.tests
+            , AudioEnvelope.tests
+            , AudioOscillator.tests
+            , AudioState.tests
+            , AudioVoice.tests
+            , AudioSine.tests
+            , AudioEffects.tests
+            , AudioScheduler.tests
+            , AudioTop.tests
+            , Grid.tests
+            , Harmony.tests
+            , Live.tests
+            , Hardware.tests
+            ]

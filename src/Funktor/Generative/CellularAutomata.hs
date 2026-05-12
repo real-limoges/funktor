@@ -1,32 +1,32 @@
-module Funktor.Generative.CellularAutomata
-    ( Rule (..)
-    , rule30
-    , rule90
-    , rule110
-    , applyRule
-    , evolve
-    , generations
-    , centerSeed
-    , rowToPattern
-    , columnDensity
-    , caPattern
-    , caRhythm
-    , caSequence
-    ) where
+module Funktor.Generative.CellularAutomata (
+    Rule (..),
+    rule30,
+    rule90,
+    rule110,
+    applyRule,
+    evolve,
+    generations,
+    centerSeed,
+    rowToPattern,
+    columnDensity,
+    caPattern,
+    caRhythm,
+    caSequence,
+) where
 
+import Data.Vector.Unboxed qualified as V
 import Data.Word (Word8)
-import qualified Data.Vector.Unboxed as V
 
-import Funktor.Core.Types
 import Funktor.Core.Pattern
+import Funktor.Core.Types
 
 -- | A Wolfram elementary CA rule (0-255).
-newtype Rule = Rule { unRule :: Word8 }
+newtype Rule = Rule {unRule :: Word8}
     deriving (Eq, Show)
 
 rule30, rule90, rule110 :: Rule
-rule30  = Rule 30
-rule90  = Rule 90
+rule30 = Rule 30
+rule90 = Rule 90
 rule110 = Rule 110
 
 type Row = V.Vector Bool

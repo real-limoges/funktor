@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test (GHC 9.12.2)
+    name: Build, test, lint, coverage (GHC 9.12.2)
     runs-on: ubuntu-latest
     container: haskell:9.12.2
 
@@ -43,8 +43,26 @@ jobs:
       - name: Update cabal index
         run: cabal update
 
-      - name: Build
-        run: cabal build all --enable-optimization=2
+      - name: Build (warnings → errors)
+        run: cabal build all --enable-optimization=2 --ghc-options=-Werror
 
-      - name: Test
-        run: cabal test --test-show-details=direct
+      - name: Test with coverage
+        run: cabal test --enable-coverage --test-show-details=direct
+
+      - name: Coverage threshold check
+        run: bash scripts/check-coverage.sh
+
+      - name: Set up hlint
+        uses: haskell-actions/hlint-setup@v2
+
+      - name: Run hlint
+        run: hlint src test app
+
+      - name: Run fourmolu
+        uses: haskell-actions/run-fourmolu@v11
+        with:
+          version: "0.19.0.1"
+          pattern: |
+            src/**/*.hs
+            app/**/*.hs
+            test/**/*.hs

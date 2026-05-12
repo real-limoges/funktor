@@ -1,9 +1,10 @@
-module Funktor.Live.Reload
-    ( persistAt
-    , reload
-    ) where
+module Funktor.Live.Reload (
+    persistAt,
+    reload,
+) where
 
 import Funktor.Core.Types (Note)
+
 -- TODO: add foreign-store dependency for persistence across GHCi :reload
 import Funktor.Core.Stream (Stream)
 

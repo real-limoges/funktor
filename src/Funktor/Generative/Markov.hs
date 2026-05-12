@@ -1,16 +1,16 @@
-module Funktor.Generative.Markov
-    ( MarkovChain (..)
-    , weightedChoice
-    , step
-    , generate
-    , runChain
-    , jazzBluesChain
-    ) where
+module Funktor.Generative.Markov (
+    MarkovChain (..),
+    weightedChoice,
+    step,
+    generate,
+    runChain,
+    jazzBluesChain,
+) where
 
-import Funktor.Core.Types
 import Funktor.Core.Stream (Stream)
+import Funktor.Core.Types
 
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import System.Random (StdGen)
 
 -- | A Markov chain: for each state, a list of (weight, next-state) pairs.

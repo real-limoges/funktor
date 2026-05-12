@@ -1,93 +1,79 @@
-module Funktor.Audio.Scheduler
-    ( SchedulerAction (..)
-    , ScheduledEvent (..)
-    , SchedulerState (..)
-    , play
-    , stop
-    , schedulerThread
-    ) where
+module Funktor.Audio.Scheduler (
+    SchedulerAction (..),
+    ScheduledEvent (..),
+    SchedulerState (..),
+    initialSchedulerState,
+    schedulerThread,
+) where
 
-import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
-import Control.Concurrent.STM (TVar, atomically, readTVar, writeTVar, STM)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM (STM, TVar, atomically, readTVar, readTVarIO, writeTVar)
 import Control.Concurrent.STM.TVar (modifyTVar')
 import Control.Monad (forever)
-import qualified Data.List as L
-import Funktor.Core.Types (Beat(..), Tempo(..), Pitch, Velocity, Note(..), Duration(..), Event(..))
+import Data.List qualified as L
+import Funktor.Audio.State (AudioState (..))
+import Funktor.Audio.Voice (poolNoteOff, poolNoteOn)
 import Funktor.Core.Stream (Stream, runStream)
-import Funktor.Audio.Voice (VoicePool, poolNoteOn, poolNoteOff)
+import Funktor.Core.Types (Beat (..), Duration (..), Event (..), Note (..), Pitch, Tempo (..), Velocity)
+import GHC.Clock (getMonotonicTime)
 
 data SchedulerAction
-    = SchedNoteOn  !Pitch !Velocity
+    = SchedNoteOn !Pitch !Velocity
     | SchedNoteOff !Pitch
     deriving (Show)
 
 data ScheduledEvent = ScheduledEvent
-    { schedTime   :: !Double
+    { schedTime :: !Double
     , schedAction :: !SchedulerAction
-    } deriving (Show)
+    }
+    deriving (Show)
 
 data SchedulerState = SchedulerState
-    { schedTempo     :: !Tempo
-    , schedStream    :: !(Stream Note)
-    , schedBeat      :: !Beat
+    { schedTempo :: !Tempo
+    , schedStream :: !(Stream Note)
+    , schedBeat :: !Beat
     , schedStartTime :: !Double
-    , schedPending   :: ![ScheduledEvent]
+    , schedPending :: ![ScheduledEvent]
     , schedLookAhead :: !Double
     }
 
-play :: TVar VoicePool -> TVar SchedulerState -> IO ThreadId
-play poolVar stateVar = do
-    let initState = SchedulerState
-            { schedTempo = Tempo 120
-            , schedStream = error "Stream not provided"
-            , schedBeat = Beat 0
-            , schedStartTime = 0
-            , schedPending = []
-            , schedLookAhead = 0.1
-            }
-    atomically $ writeTVar stateVar initState
-    forkIO (schedulerThread poolVar stateVar)
+initialSchedulerState :: Stream Note -> Tempo -> Double -> SchedulerState
+initialSchedulerState stream tempo startTime =
+    SchedulerState
+        { schedTempo = tempo
+        , schedStream = stream
+        , schedBeat = Beat 0
+        , schedStartTime = startTime
+        , schedPending = []
+        , schedLookAhead = 0.1
+        }
 
-stop :: ThreadId -> IO ()
-stop = killThread
-
-schedulerThread :: TVar VoicePool -> TVar SchedulerState -> IO ()
-schedulerThread poolVar stateVar = forever $ do
-    currentTime <- return 0
-    processDueEvents poolVar stateVar currentTime
-    scheduleNewEvents poolVar stateVar currentTime
+schedulerThread :: TVar AudioState -> TVar SchedulerState -> IO ()
+schedulerThread audioVar schedVar = forever $ do
+    now <- getMonotonicTime
+    startTime <- schedStartTime <$> readTVarIO schedVar
+    let currentTime = now - startTime
+    atomically $ do
+        st <- readTVar schedVar
+        let (due, remaining) = L.partition (\e -> schedTime e <= currentTime) (schedPending st)
+            nextBeat = schedBeat st + Beat (secondsToBeats (schedTempo st) (schedLookAhead st))
+            newEvents = eventsFromStream st (schedBeat st) nextBeat
+            merged = L.sortOn schedTime (remaining ++ newEvents)
+        writeTVar schedVar st{schedBeat = nextBeat, schedPending = merged}
+        mapM_ (applyAction audioVar currentTime) due
     threadDelay 10000
 
-processDueEvents :: TVar VoicePool -> TVar SchedulerState -> Double -> IO ()
-processDueEvents poolVar stateVar currentTime = atomically $ do
-    st <- readTVar stateVar
-    let (due, remaining) = partitionEvents (schedPending st) currentTime
-    writeTVar stateVar st { schedPending = remaining }
-    mapM_ (runActionSTM poolVar currentTime) due
+applyAction :: TVar AudioState -> Double -> ScheduledEvent -> STM ()
+applyAction audioVar currentTime event = case schedAction event of
+    SchedNoteOn pitch vel -> modifyAudioPool $ poolNoteOn currentTime pitch vel
+    SchedNoteOff pitch -> modifyAudioPool $ poolNoteOff currentTime pitch
+  where
+    modifyAudioPool f = modifyTVar' audioVar (\s -> s{audioPool = f (audioPool s)})
 
-partitionEvents :: [ScheduledEvent] -> Double -> ([ScheduledEvent], [ScheduledEvent])
-partitionEvents events currentTime = 
-    let due = filter (\e -> schedTime e <= currentTime) events
-        remaining = filter (\e -> schedTime e > currentTime) events
-    in (due, remaining)
-
-runActionSTM :: TVar VoicePool -> Double -> ScheduledEvent -> STM ()
-runActionSTM poolVar currentTime event = case schedAction event of
-    SchedNoteOn pitch vel -> modifyTVar' poolVar (poolNoteOn currentTime pitch vel)
-    SchedNoteOff pitch -> modifyTVar' poolVar (poolNoteOff currentTime pitch)
-
-scheduleNewEvents :: TVar VoicePool -> TVar SchedulerState -> Double -> IO ()
-scheduleNewEvents _ stateVar _ = atomically $ do
-    st <- readTVar stateVar
-    let nextBeat = schedBeat st + Beat (secondsToBeats (schedTempo st) (schedLookAhead st))
-        newEvents = eventsToActions (schedTempo st) (schedStartTime st) (schedBeat st) nextBeat (schedStream st)
-        merged = sortEvents (schedPending st ++ newEvents)
-    writeTVar stateVar st { schedBeat = nextBeat, schedPending = merged }
-
-eventsToActions :: Tempo -> Double -> Beat -> Beat -> Stream Note -> [ScheduledEvent]
-eventsToActions tempo startTime fromBeat toBeat stream =
-    let events = runStream stream fromBeat toBeat
-    in concatMap (eventToActions tempo startTime) events
+eventsFromStream :: SchedulerState -> Beat -> Beat -> [ScheduledEvent]
+eventsFromStream st fromBeat toBeat =
+    concatMap (eventToActions (schedTempo st) (schedStartTime st)) $
+        runStream (schedStream st) fromBeat toBeat
 
 eventToActions :: Tempo -> Double -> Event Note -> [ScheduledEvent]
 eventToActions tempo startTime (Event beat (Note pitch duration velocity)) =
@@ -100,6 +86,3 @@ beatToSeconds (Tempo bpm) beats = fromRational beats * 60 / bpm
 
 secondsToBeats :: Tempo -> Double -> Rational
 secondsToBeats (Tempo bpm) secs = toRational (secs * bpm / 60)
-
-sortEvents :: [ScheduledEvent] -> [ScheduledEvent]
-sortEvents = L.sortBy (\a b -> compare (schedTime a) (schedTime b))

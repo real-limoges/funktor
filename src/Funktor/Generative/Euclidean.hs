@@ -1,13 +1,13 @@
-module Funktor.Generative.Euclidean
-    ( bjorklund
-    , euclidean
-    , euclideanWith
-    , rotateEuclidean
-    , polyEuclidean
-    ) where
+module Funktor.Generative.Euclidean (
+    bjorklund,
+    euclidean,
+    euclideanWith,
+    rotateEuclidean,
+    polyEuclidean,
+) where
 
-import Funktor.Core.Types
 import Funktor.Core.Pattern
+import Funktor.Core.Types
 
 bjorklund :: Int -> Int -> [Bool]
 bjorklund = undefined
