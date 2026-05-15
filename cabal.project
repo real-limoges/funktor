@@ -1,0 +1,15 @@
+-- Upstream PortMidi-0.2.0.0 hardcodes `cc-options: -msse2` on darwin, which
+-- clang rejects on arm64. We pull from a fork with that flag stripped (or
+-- guarded by `if arch(x86_64)`). Everything else is identical to the Hackage
+-- release.
+--
+-- Only consulted when building with `--flags=+midi` (the default). Cloud
+-- builds with `--flags=-midi` skip the PortMidi dependency entirely and this
+-- repository is never fetched.
+packages:
+    .
+
+source-repository-package
+    type:     git
+    location: https://github.com/real-limoges/portmidi.git
+    tag:      funktor-patch
