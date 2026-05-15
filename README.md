@@ -59,9 +59,11 @@ PortMidi snapshots devices at process start and version 0.2 exposes no refresh
 primitive, so plugging in a new device after starting GHCi won't make it
 appear — restart the session.
 
-PortMidi depends on a vendored fork in `vendor/PortMidi` that strips the
-upstream `-msse2` flag (Apple-Silicon clang rejects it) and downgrades a few
-modern-Xcode warnings back to non-fatal. No system-portmidi install needed.
+PortMidi is pulled from a GitHub fork via `cabal.project`
+(`source-repository-package`) that strips the upstream `-msse2` flag — clang
+rejects it on Apple Silicon. No system-portmidi install needed. Cloud builds
+that don't want the C dependency can pass `--flags=-midi` to skip PortMidi
+entirely; `Funktor.Hardware.MIDI` is then excluded from the build.
 
 ## Project Structure
 

@@ -5,6 +5,7 @@ module Funktor.Audio.Scheduler (
     initialSchedulerState,
     schedulerThread,
     enqueueImmediate,
+    hotSwap,
 ) where
 
 import Control.Concurrent (threadDelay)
@@ -98,3 +99,13 @@ enqueueImmediate :: TVar SchedulerState -> SchedulerAction -> STM ()
 enqueueImmediate var act =
     modifyTVar' var $ \s ->
         s{schedPending = ScheduledEvent (-1 / 0) act : schedPending s}
+
+{- | Atomically replace the scheduler's stream, restart the beat clock at 0,
+and drop any events queued from the previous stream. Used by 'Funktor.Live'
+for the GHCi @play@ hot-swap, by 'Funktor.Grid.Binding' to commit Sequencer
+toggle changes, and by Scene-mode pad presses to swap whole patterns.
+-}
+hotSwap :: TVar SchedulerState -> Stream Note -> STM ()
+hotSwap var stream =
+    modifyTVar' var $ \s ->
+        s{schedStream = stream, schedBeat = Beat 0, schedPending = []}

@@ -48,8 +48,11 @@ declare -a THRESHOLDS=(
     "Funktor.Core.Stream:78"
     "Funktor.Core.Types:80"
     "Funktor.Grid:90"
+    "Funktor.Grid.Binding:40"
     "Funktor.Hardware.MIDI:40"
+    "Funktor.Hardware.Launchpad:80"
     "Funktor.Harmony:95"
+    "Funktor.Live.Reload:10"
 )
 
 fail=0

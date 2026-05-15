@@ -22,17 +22,20 @@ import Audio.StateSpec qualified as AudioState
 import Audio.VoiceSpec qualified as AudioVoice
 
 -- Pure domains
+import GridBindingSpec qualified as GridBinding
 import GridSpec qualified as Grid
 import HarmonySpec qualified as Harmony
+import Live.ReloadSpec qualified as LiveReload
 import LiveSpec qualified as Live
 
 #ifdef MIDI_ENABLED
 import HardwareSpec qualified as Hardware
+import LaunchpadSpec qualified as Launchpad
 #endif
 
 hardwareTests :: [TestTree]
 #ifdef MIDI_ENABLED
-hardwareTests = [Hardware.tests]
+hardwareTests = [Hardware.tests, Launchpad.tests]
 #else
 hardwareTests = []
 #endif
@@ -53,7 +56,9 @@ main =
             , AudioScheduler.tests
             , AudioTop.tests
             , Grid.tests
+            , GridBinding.tests
             , Harmony.tests
             , Live.tests
+            , LiveReload.tests
             ]
                 <> hardwareTests
