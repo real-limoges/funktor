@@ -1,8 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Main (main) where
 
-import Test.Tasty (defaultMain, testGroup)
+import Test.Tasty (TestTree, defaultMain, testGroup)
 
 -- Core
 
@@ -22,15 +23,24 @@ import Audio.VoiceSpec qualified as AudioVoice
 
 -- Pure domains
 import GridSpec qualified as Grid
-import HardwareSpec qualified as Hardware
 import HarmonySpec qualified as Harmony
 import LiveSpec qualified as Live
+
+#ifdef MIDI_ENABLED
+import HardwareSpec qualified as Hardware
+#endif
+
+hardwareTests :: [TestTree]
+#ifdef MIDI_ENABLED
+hardwareTests = [Hardware.tests]
+#else
+hardwareTests = []
+#endif
 
 main :: IO ()
 main =
     defaultMain $
-        testGroup
-            "Funktor test suite"
+        testGroup "Funktor test suite" $
             [ CoreTypes.tests
             , CorePattern.tests
             , CoreStream.tests
@@ -45,5 +55,5 @@ main =
             , Grid.tests
             , Harmony.tests
             , Live.tests
-            , Hardware.tests
             ]
+                <> hardwareTests

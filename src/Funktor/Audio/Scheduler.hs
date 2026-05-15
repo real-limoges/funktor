@@ -4,6 +4,7 @@ module Funktor.Audio.Scheduler (
     SchedulerState (..),
     initialSchedulerState,
     schedulerThread,
+    enqueueImmediate,
 ) where
 
 import Control.Concurrent (threadDelay)
@@ -20,7 +21,7 @@ import GHC.Clock (getMonotonicTime)
 data SchedulerAction
     = SchedNoteOn !Pitch !Velocity
     | SchedNoteOff !Pitch
-    deriving (Show)
+    deriving (Eq, Show)
 
 data ScheduledEvent = ScheduledEvent
     { schedTime :: !Double
@@ -86,3 +87,14 @@ beatToSeconds (Tempo bpm) beats = fromRational beats * 60 / bpm
 
 secondsToBeats :: Tempo -> Double -> Rational
 secondsToBeats (Tempo bpm) secs = toRational (secs * bpm / 60)
+
+{- | Inject a 'SchedulerAction' that fires on the very next scheduler tick.
+Used by 'Funktor.Hardware.MIDI' to forward live MIDI note-on/off events
+into the audio pipeline without consulting the wall clock. The event is
+timestamped at @-Infinity@ so the next 'schedulerThread' iteration sees it
+as already due, regardless of clock drift.
+-}
+enqueueImmediate :: TVar SchedulerState -> SchedulerAction -> STM ()
+enqueueImmediate var act =
+    modifyTVar' var $ \s ->
+        s{schedPending = ScheduledEvent (-1 / 0) act : schedPending s}
