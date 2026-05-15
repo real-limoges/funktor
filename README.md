@@ -19,8 +19,9 @@ Early development. Audio output works end-to-end (sine + envelope + voice pool +
 - GHCi live interface: `play`, `stop`, `setTempo` with atomic stream hot-swap
 - Oscillator waveforms: Sine, Sawtooth, Square, Triangle (with PolyBLEP band-limiting)
 - Effects: one-pole low-pass filter, delay with feedback (reverb structurally wired)
+- MIDI input: PortMidi-backed device enumeration, note-in / CC-in / sysex-out, background reassembly thread, scheduler wiring (`startMidi` / `stopMidi`)
 
-**Stubbed for future implementation:** Generative (Euclidean rhythms, Markov chains, cellular automata), Harmony voicing/analysis/extensions, Hardware (MIDI input, Launchpad), Grid-audio binding, Terminal UI, Hot reload, Session recording. See `docs/architecture.md` for the stub inventory.
+**Stubbed for future implementation:** Generative (Euclidean rhythms, Markov chains, cellular automata), Harmony voicing/analysis/extensions, Launchpad driver, Grid-audio binding, Terminal UI, Hot reload, Session recording. See `docs/architecture.md` for the stub inventory.
 
 ## Building
 
@@ -41,6 +42,26 @@ cabal repl
 λ> setTempo (Tempo 160)
 λ> stop
 ```
+
+### MIDI input
+
+With a session running, attach a MIDI keyboard:
+
+```
+λ> listMidiInputs              -- print devices PortMidi sees
+λ> play silence                -- silent generative stream
+λ> startMidi                   -- opens first input, prints device name
+-- press keys, audio comes out the SDL device
+λ> stopMidi                    -- (or 'stop' tears down everything)
+```
+
+PortMidi snapshots devices at process start and version 0.2 exposes no refresh
+primitive, so plugging in a new device after starting GHCi won't make it
+appear — restart the session.
+
+PortMidi depends on a vendored fork in `vendor/PortMidi` that strips the
+upstream `-msse2` flag (Apple-Silicon clang rejects it) and downgrades a few
+modern-Xcode warnings back to non-fatal. No system-portmidi install needed.
 
 ## Project Structure
 
@@ -65,8 +86,10 @@ src/
     Grid.hs                        -- Pad grid model
     Grid/                          -- (stub: Binding)
     Generative/                    -- (stubs: Euclidean, Markov, CellularAutomata)
-    Hardware/                      -- (stubs: MIDI, Launchpad)
-    Live.hs                        -- GHCi live interface (play/stop/setTempo)
+    Hardware/                      -- (MIDI live; Launchpad stub)
+      MIDI.hs                      -- PortMidi-backed input/output + scheduler routing
+      Launchpad.hs                 -- (stub)
+    Live.hs                        -- GHCi live interface (play/stop/setTempo/startMidi/stopMidi)
     Live/                          -- (stubs: Reload, Session)
     UI.hs                          -- (types only; brick TUI is a future node)
 docs/

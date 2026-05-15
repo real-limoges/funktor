@@ -6,17 +6,29 @@
 set -euo pipefail
 
 TIX=$(find dist-newstyle -name "funktor-test.tix" 2>/dev/null | head -1)
-LIBMIX=$(find dist-newstyle -type d -path "*build/extra-compilation-artifacts/hpc/vanilla/mix" 2>/dev/null | head -1)
+# Scope to funktor-* so library dependencies (e.g. vendored PortMidi) that
+# also produce hpc artifacts don't shadow our own mix directory.
+LIBMIX=$(find dist-newstyle -type d -path "*funktor-0*/build/extra-compilation-artifacts/hpc/vanilla/mix" 2>/dev/null | head -1)
 TESTMIX=$(find dist-newstyle -type d -path "*funktor-test-tmp/extra-compilation-artifacts/hpc/vanilla/mix" 2>/dev/null | head -1)
+# Library deps compiled with -fhpc need their mix dirs registered too, even
+# though we don't gate on their coverage — hpc otherwise fails to map the tix
+# entries it finds for them.
+DEPMIXES=$(find dist-newstyle -type d -path "*build/extra-compilation-artifacts/hpc/vanilla/mix" -not -path "*funktor-0*" 2>/dev/null)
 
 if [[ -z "$TIX" || -z "$LIBMIX" ]]; then
     echo "ERROR: no coverage artifacts found. Run 'cabal test --enable-coverage' first." >&2
     exit 2
 fi
 
+DEPMIX_ARGS=()
+while IFS= read -r dir; do
+    [[ -n "$dir" ]] && DEPMIX_ARGS+=("--hpcdir=$dir")
+done <<<"$DEPMIXES"
+
 REPORT=$(hpc report "$TIX" \
     --hpcdir="$LIBMIX" \
     --hpcdir="$TESTMIX" \
+    "${DEPMIX_ARGS[@]}" \
     --exclude=Main \
     --exclude=Paths_funktor \
     --per-module)
@@ -36,6 +48,7 @@ declare -a THRESHOLDS=(
     "Funktor.Core.Stream:78"
     "Funktor.Core.Types:80"
     "Funktor.Grid:90"
+    "Funktor.Hardware.MIDI:40"
     "Funktor.Harmony:95"
 )
 
