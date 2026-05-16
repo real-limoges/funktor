@@ -2,10 +2,8 @@
 
 module Test.Utils.Arbitrary () where
 
-import Funktor.Audio.Envelope (EnvelopeParams (..))
-import Funktor.Audio.Oscillator (Waveform)
-import Funktor.Core.Pattern (Pattern, pattern_)
-import Funktor.Core.Stream (Stream, fromPattern)
+import Funktor.Audio.Timbre (Waveform)
+import Funktor.Core.Stream (Stream, fromList)
 import Funktor.Core.Types
 import Test.QuickCheck (Arbitrary (..), Gen, NonNegative (..), Positive (..), choose, elements, sized, vectorOf)
 
@@ -28,35 +26,28 @@ instance Arbitrary Velocity where
         Positive d <- arbitrary :: Gen (Positive Double)
         pure (Velocity (min 1.0 d))
 
-instance (Arbitrary a) => Arbitrary (Event a) where
-    arbitrary = Event <$> arbitrary <*> arbitrary
-
-instance (Arbitrary a) => Arbitrary (Pattern a) where
-    arbitrary = sized $ \n -> do
-        k <- choose (0, n)
-        evs <- vectorOf k arbitrary
-        dur <- arbitrary
-        pure (pattern_ dur evs)
-
-instance Arbitrary EnvelopeParams where
+{- | Generates arcs with @end > start@ so 'arcLength' stays positive.
+Useful for property tests that assume non-degenerate intervals.
+-}
+instance Arbitrary Arc where
     arbitrary = do
-        Positive a <- arbitrary :: Gen (Positive Double)
-        Positive d <- arbitrary :: Gen (Positive Double)
-        s <- choose (0.0, 1.0)
-        Positive r <- arbitrary :: Gen (Positive Double)
-        pure
-            EnvelopeParams
-                { attack = a
-                , decay = d
-                , sustain = s
-                , release = r
-                }
+        s <- arbitrary
+        Positive len <- arbitrary :: Gen (Positive Rational)
+        pure (Arc s (s + Beat len))
+
+instance (Arbitrary a) => Arbitrary (Event a) where
+    arbitrary = do
+        a <- arbitrary
+        event a <$> arbitrary
 
 instance Arbitrary Waveform where
     arbitrary = pure minBound
 
 instance (Arbitrary a) => Arbitrary (Stream a) where
-    arbitrary = fromPattern <$> arbitrary
+    arbitrary = sized $ \n -> do
+        k <- choose (0, n)
+        evs <- vectorOf k arbitrary
+        pure (fromList evs)
 
 instance Arbitrary ChordQuality where
     arbitrary = elements [minBound .. maxBound]

@@ -11,10 +11,10 @@ import Funktor.Audio.Scheduler (
     SchedulerState (..),
     initialSchedulerState,
  )
-import Funktor.Audio.State (createAudioState)
 import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Stream (Stream, runStream, silence)
 import Funktor.Core.Types (
+    Arc (..),
     Beat (..),
     Duration (..),
     Event (..),
@@ -97,7 +97,7 @@ sequencerStreamTests =
                         , stepDur = Duration 1
                         }
                 evts = sample (sequencerStream st) (Beat 0) (Beat 2)
-                pitchAt b = (.value) <$> lookup b [(e.beat, e) | e <- evts]
+                pitchAt b = (.value) <$> lookup b [(e.part.start, e) | e <- evts]
              in ((.pitch) <$> pitchAt (Beat 0), (.pitch) <$> pitchAt (Beat 1))
                     @?= (Just (Pitch 60), Just (Pitch 62))
         , testCase "all-off grid produces silence over query window" $
@@ -205,6 +205,5 @@ pressPadSmokeTests =
         ]
   where
     newEngine = do
-        audioVar <- newTVarIO createAudioState
         schedVar <- newTVarIO (initialSchedulerState silence (Tempo 120) 0)
-        newAudioEngine audioVar schedVar
+        newAudioEngine schedVar

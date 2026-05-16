@@ -41,23 +41,21 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Vector qualified as V
 import Funktor.Audio.Scheduler (SchedulerAction (..), SchedulerState, enqueueImmediate, hotSwap)
-import Funktor.Audio.State (AudioState)
 import Funktor.Audio.Timbre (defaultTimbre)
-import Funktor.Core.Pattern (Pattern (..))
-import Funktor.Core.Stream (Stream, fromPattern, silence)
+import Funktor.Core.Stream (Stream, periodic, silence)
 import Funktor.Core.Types (
+    Arc (..),
     Beat (..),
     Duration (..),
-    Event (..),
     Note (..),
     Pitch (..),
     Velocity (..),
+    event,
  )
 import Funktor.Grid (Color (..), Grid (..), Pad (..), PadAction (..), emptyGrid, setPad)
 
 data AudioEngine = AudioEngine
-    { audioVar :: !(TVar AudioState)
-    , schedVar :: !(TVar SchedulerState)
+    { schedVar :: !(TVar SchedulerState)
     , mode :: !(TVar GridMode)
     }
 
@@ -109,10 +107,10 @@ defaultInstrumentConfig =
         , rowStep = 5
         }
 
-newAudioEngine :: TVar AudioState -> TVar SchedulerState -> IO AudioEngine
-newAudioEngine av sv = do
+newAudioEngine :: TVar SchedulerState -> IO AudioEngine
+newAudioEngine sv = do
     modeVar <- newTVarIO (InstrumentMode defaultInstrumentConfig)
-    pure AudioEngine{audioVar = av, schedVar = sv, mode = modeVar}
+    pure AudioEngine{schedVar = sv, mode = modeVar}
 
 -- | Swap the dispatch mode. LED redraw is the caller's responsibility.
 setMode :: AudioEngine -> GridMode -> IO ()
@@ -161,7 +159,7 @@ One full revolution lasts @width * stepDur@ beats.
 sequencerStream :: SequencerState -> Stream Note
 sequencerStream st
     | V.null st.steps = silence
-    | otherwise = fromPattern (Pattern evts patDur)
+    | otherwise = periodic patDur evts
   where
     w = V.length (V.head st.steps)
     stepBeats = unDuration st.stepDur
@@ -170,9 +168,10 @@ sequencerStream st
         offset : _ -> st.root + Pitch offset
         [] -> st.root
     evts =
-        [ Event (Beat (fromIntegral col * stepBeats)) (Note (rowPitch row) st.stepDur (Velocity 0.7))
+        [ event (Arc s (s + Beat stepBeats)) (Note (rowPitch row) (Velocity 0.7))
         | (row, cells) <- zip [0 :: Int ..] (V.toList st.steps)
         , (col, True) <- zip [0 :: Int ..] (V.toList cells)
+        , let s = Beat (fromIntegral col * stepBeats)
         ]
 
 {- | Switch modes from a top-row press. Columns 0/1/2 select Sequencer /

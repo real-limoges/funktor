@@ -4,7 +4,10 @@ An interactive music application written in Haskell. Funktor models musical conc
 
 ## Status
 
-Early development. Audio output works end-to-end (sine + envelope + voice pool + scheduler); harmony, generative, hardware, and live-coding branches are stubbed for future work.
+Early development. Pattern DSL, scheduler, MIDI input, and Launchpad grid
+binding all work end-to-end against a SuperCollider audio backend (`scsynth`).
+Some `Generative.*`, `Harmony.*`, `Live.Session` modules are stubbed for
+future work.
 
 **What's working:**
 
@@ -14,24 +17,35 @@ Early development. Audio output works end-to-end (sine + envelope + voice pool +
 - Infinite streams: `fromPattern`, `fromList`, `merge`, `mergeMany`, `shiftStream`
 - Harmony: `qualityIntervals`, `chordTones`, `scaleTones`
 - Grid model: `Grid`, `Pad`, `Color`, `PadAction`, `setPad`, `getPad`
-- Audio engine: SDL2 callback-driven sine oscillator, ADSR envelope, 8-voice polyphonic pool with oldest-steal
-- Scheduler: wall-clock-driven event scheduler (`GHC.Clock`-based) bridging `Stream Note` to the voice pool
-- GHCi live interface: `play`, `stop`, `setTempo` with atomic stream hot-swap
-- Oscillator waveforms: Sine, Sawtooth, Square, Triangle (with PolyBLEP band-limiting)
-- Effects: one-pole low-pass filter, delay with feedback (reverb structurally wired)
+- Audio backend: OSC client to SuperCollider's `scsynth` over UDP (synthesis runs in SC)
+- Scheduler: wall-clock-driven event scheduler (`GHC.Clock`-based) bridging `Stream Note` to OSC `/s_new` / `/n_set` calls
+- GHCi live interface: `play`, `stop`, `setTempo` with atomic stream hot-swap; session survives `:reload` via `foreign-store`
 - MIDI input: PortMidi-backed device enumeration, note-in / CC-in / sysex-out, background reassembly thread, scheduler wiring (`startMidi` / `stopMidi`)
+- Launchpad: Mk3 SysEx + grid binding (Sequencer / Instrument / Scene modes)
 
-**Stubbed for future implementation:** Generative (Euclidean rhythms, Markov chains, cellular automata), Harmony voicing/analysis/extensions, Launchpad driver, Grid-audio binding, Terminal UI, Hot reload, Session recording. See `docs/architecture.md` for the stub inventory.
+**Stubbed for future implementation:** Generative (Euclidean rhythms, Markov chains, cellular automata), Harmony voicing/analysis/extensions, Session recording. See `docs/architecture.md` for the stub inventory.
 
 ## Building
 
-Requires **GHC 9.12.2** and **Cabal 3.14**.
+Requires **GHC 9.12.2** and **Cabal 3.14**, and **SuperCollider** (for `scsynth`).
 
 ```bash
-cabal build          # Build all components
-cabal test           # Run the test suite (38 tests)
-cabal run funktor    # Run the executable (plays A4 for 1 second)
+cabal build                # Build all components
+cabal test                 # Run the test suite
+cabal run funktor          # Plays A4 for 1 second through scsynth
+cabal run funktor --check-sc   # Probes scsynth on 127.0.0.1:57110 and exits
 ```
+
+### Booting the audio backend
+
+`scsynth` must be running before `play`. To boot it and load Funktor's
+`funktor_note` SynthDef:
+
+1. Open `synthdefs/funktor.scd` in the SuperCollider IDE.
+2. Place the cursor inside the outer parens and evaluate (Cmd/Ctrl+Enter).
+3. Wait for `Funktor: synthdef loaded, server ready on port 57110`.
+
+The Haskell side talks to `scsynth` over UDP at `127.0.0.1:57110`.
 
 For interactive use:
 
@@ -51,7 +65,7 @@ With a session running, attach a MIDI keyboard:
 λ> listMidiInputs              -- print devices PortMidi sees
 λ> play silence                -- silent generative stream
 λ> startMidi                   -- opens first input, prints device name
--- press keys, audio comes out the SDL device
+-- press keys, audio comes out of scsynth
 λ> stopMidi                    -- (or 'stop' tears down everything)
 ```
 
@@ -75,25 +89,27 @@ src/
       Types.hs                     -- Musical primitives and chord/scale types
       Pattern.hs                   -- Finite, composable musical sequences
       Stream.hs                    -- Infinite, query-by-time-range sequences
-    Audio.hs                       -- SDL2 audio device (sine callback)
+    Audio.hs                       -- thin facade (openDevice/noteOn/noteOff)
     Audio/
-      State.hs                     -- AudioState/OscState records
-      Oscillator.hs                -- Waveform types and PolyBLEP synthesis
-      Envelope.hs                  -- Pure ADSR amplitude function
-      Voice.hs                     -- Voice pool + oldest-steal allocation
+      SC.hs                        -- OSC client to scsynth (UDP)
       Scheduler.hs                 -- Wall-clock event scheduler
-      Effects.hs                   -- Low-pass, delay, reverb structures
+      Timbre.hs                    -- SynthDef name + override params
     Harmony.hs                     -- Chord/scale interval math
     Harmony/                       -- (stubs: Voicing, Analysis)
     Grid.hs                        -- Pad grid model
-    Grid/                          -- (stub: Binding)
+    Grid/
+      Binding.hs                   -- Sequencer / Instrument / Scene dispatcher
     Generative/                    -- (stubs: Euclidean, Markov, CellularAutomata)
-    Hardware/                      -- (MIDI live; Launchpad stub)
+    Hardware/
       MIDI.hs                      -- PortMidi-backed input/output + scheduler routing
-      Launchpad.hs                 -- (stub)
-    Live.hs                        -- GHCi live interface (play/stop/setTempo/startMidi/stopMidi)
-    Live/                          -- (stubs: Reload, Session)
-    UI.hs                          -- (types only; brick TUI is a future node)
+      Launchpad.hs                 -- Launchpad Mk3 SysEx + pad-note translation
+    Live.hs                        -- GHCi live interface (play/stop/setTempo/startMidi/startLaunchpad)
+    Live/
+      Reload.hs                    -- fsnotify watcher + foreign-store persistence
+      Session.hs                   -- (stub)
+    UI.hs                          -- Console dashboard (renderUI / runUI)
+synthdefs/
+  funktor.scd                      -- SuperCollider source the user evaluates once
 docs/
   architecture.md                  -- Working architecture reference
 ```

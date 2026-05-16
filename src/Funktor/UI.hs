@@ -21,12 +21,8 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (TVar, readTVarIO)
 import Control.Monad (forever)
 import Data.IORef (newIORef, readIORef, writeIORef)
-import Data.Maybe (isJust)
-import Data.Vector qualified as V
 
 import Funktor.Audio.Scheduler (SchedulerState (..))
-import Funktor.Audio.State (AudioState (..))
-import Funktor.Audio.Voice (VoicePool (..))
 import Funktor.Core.Types (Beat (..), Duration (..), Tempo (..))
 import Funktor.Grid (Color (..), Grid (..), Pad (..), PadAction (..), emptyGrid)
 
@@ -116,18 +112,19 @@ colorChar Purple = "P"
 colorChar Cyan = "C"
 colorChar White = "W"
 
-{- | Run the dashboard, polling the scheduler + audio engine at ~10 Hz and
-redrawing on each tick. Uses ANSI cursor-home to overdraw the previous
-frame; on a terminal without ANSI the output appends instead. Press
-Ctrl-C to exit.
+{- | Run the dashboard, polling the scheduler at ~10 Hz and redrawing on each
+tick. Uses ANSI cursor-home to overdraw the previous frame; on a terminal
+without ANSI the output appends instead. Press Ctrl-C to exit.
+
+Voice count is no longer surfaced — voices live in @scsynth@, not in
+Haskell. A @/g_queryTree@ round-trip could resurrect that display if you
+want it back.
 -}
-runUI :: TVar AudioState -> TVar SchedulerState -> IO ()
-runUI audioVar schedVar = do
+runUI :: TVar SchedulerState -> IO ()
+runUI schedVar = do
     stateRef <- newIORef initialUIState
     forever $ do
         sched <- readTVarIO schedVar
-        audio <- readTVarIO audioVar
-        let liveCount = V.length (V.filter isJust audio.pool.voices)
         prev <- readIORef stateRef
         let updated =
                 prev
@@ -135,9 +132,8 @@ runUI audioVar schedVar = do
                     & applyEvent (SetBeat sched.beat)
                     & applyEvent (SetPlaying True)
         writeIORef stateRef updated
-        putStr "\ESC[H\ESC[2J" -- clear screen + home cursor (ANSI)
+        putStr "\ESC[H\ESC[2J"
         mapM_ putStrLn (renderUI updated)
-        putStrLn ("Active voices: " ++ show liveCount)
         threadDelay 100000
 
 (&) :: a -> (a -> b) -> b

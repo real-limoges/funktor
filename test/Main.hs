@@ -7,19 +7,12 @@ import Test.Tasty (TestTree, defaultMain, testGroup)
 
 -- Core
 
-import Core.PatternSpec qualified as CorePattern
 import Core.StreamSpec qualified as CoreStream
 import Core.TypesSpec qualified as CoreTypes
 
 -- Audio
-import Audio.AudioSpec qualified as AudioTop
-import Audio.EffectsSpec qualified as AudioEffects
-import Audio.EnvelopeSpec qualified as AudioEnvelope
-import Audio.OscillatorSpec qualified as AudioOscillator
 import Audio.SchedulerSpec qualified as AudioScheduler
-import Audio.SineSpec qualified as AudioSine
-import Audio.StateSpec qualified as AudioState
-import Audio.VoiceSpec qualified as AudioVoice
+import Audio.TimbreSpec qualified as AudioTimbre
 
 -- Pure domains
 import Generative.CellularAutomataSpec qualified as GenerativeCA
@@ -52,16 +45,9 @@ main =
     defaultMain $
         testGroup "Funktor test suite" $
             [ CoreTypes.tests
-            , CorePattern.tests
             , CoreStream.tests
-            , AudioEnvelope.tests
-            , AudioOscillator.tests
-            , AudioState.tests
-            , AudioVoice.tests
-            , AudioSine.tests
-            , AudioEffects.tests
+            , AudioTimbre.tests
             , AudioScheduler.tests
-            , AudioTop.tests
             , GenerativeCA.tests
             , GenerativeEuclidean.tests
             , GenerativeMarkov.tests

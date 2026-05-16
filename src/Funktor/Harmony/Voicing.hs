@@ -106,6 +106,9 @@ voiceLead range (c : cs) =
             [] -> chordTones c
      in scanl (bestVoicing range) seed cs
 
--- | Materialise a voicing as a list of simultaneously-struck notes.
-voicingToNotes :: Duration -> Velocity -> Voicing -> [Note]
-voicingToNotes dur vel = map (\p -> Note p dur vel)
+{- | Materialise a voicing as a list of simultaneously-struck notes. Note
+duration lives on the containing 'Event' under the new DSL, so this no
+longer takes a 'Duration' argument.
+-}
+voicingToNotes :: Velocity -> Voicing -> [Note]
+voicingToNotes vel = map (`Note` vel)

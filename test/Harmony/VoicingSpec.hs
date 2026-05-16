@@ -61,5 +61,5 @@ tests =
                 cost = sum (zipWith voiceLeadingCost vs (drop 1 vs))
              in assertBool ("cost was " ++ show cost) (cost <= 12)
         , testCase "voicingToNotes produces a note per voice" $
-            length (voicingToNotes (Duration 1) (Velocity 0.7) (chordTones cMaj7)) @?= 4
+            length (voicingToNotes (Velocity 0.7) (chordTones cMaj7)) @?= 4
         ]

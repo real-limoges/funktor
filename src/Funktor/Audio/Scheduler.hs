@@ -4,6 +4,7 @@ module Funktor.Audio.Scheduler (
     SchedulerState (..),
     initialSchedulerState,
     schedulerThread,
+    step,
     enqueueImmediate,
     hotSwap,
 ) where
@@ -13,11 +14,11 @@ import Control.Concurrent.STM (STM, TVar, atomically, readTVar, readTVarIO, writ
 import Control.Concurrent.STM.TVar (modifyTVar')
 import Control.Monad (forever)
 import Data.List qualified as L
-import Funktor.Audio.State (AudioState (..))
+import Funktor.Audio.SC (SCConn)
+import Funktor.Audio.SC qualified as SC
 import Funktor.Audio.Timbre (Timbre, defaultTimbre)
-import Funktor.Audio.Voice (poolNoteOff, poolNoteOn)
-import Funktor.Core.Stream (Stream, runStream)
-import Funktor.Core.Types (Beat (..), Duration (..), Event (..), Note (..), Pitch, Tempo (..), Velocity)
+import Funktor.Core.Stream (Stream, query)
+import Funktor.Core.Types (Arc (..), Beat (..), Event (..), Note (..), Pitch, Tempo (..), Velocity)
 import GHC.Clock (getMonotonicTime)
 
 data SchedulerAction
@@ -29,7 +30,7 @@ data ScheduledEvent = ScheduledEvent
     { time :: !Double
     , action :: !SchedulerAction
     }
-    deriving (Show)
+    deriving (Eq, Show)
 
 data SchedulerState = SchedulerState
     { tempo :: !Tempo
@@ -55,39 +56,47 @@ initialSchedulerState s t start =
         , lookAhead = 0.1
         }
 
-schedulerThread :: TVar AudioState -> TVar SchedulerState -> IO ()
-schedulerThread audioVar schedVar = forever $ do
+schedulerThread :: SCConn -> TVar SchedulerState -> IO ()
+schedulerThread sc schedVar = forever $ do
     now <- getMonotonicTime
     start <- (.startTime) <$> readTVarIO schedVar
     let currentTime = now - start
-    atomically $ do
+    due <- atomically $ do
         st <- readTVar schedVar
-        let (due, remaining) = L.partition (\e -> e.time <= currentTime) st.pending
-            nextBeat = st.beat + Beat (secondsToBeats st.tempo st.lookAhead)
-            newEvents = eventsFromStream st st.beat nextBeat
-            merged = L.sortOn (.time) (remaining ++ newEvents)
-        writeTVar schedVar st{beat = nextBeat, pending = merged}
-        mapM_ (applyAction audioVar currentTime) due
+        let (st', dueEvts) = step currentTime st
+        writeTVar schedVar st'
+        pure dueEvts
+    mapM_ (applyAction sc) due
     -- 10ms tick: fine enough that quantisation isn't audible at sensible
     -- tempos, coarse enough to leave the CPU alone between batches.
     threadDelay 10000
 
-applyAction :: TVar AudioState -> Double -> ScheduledEvent -> STM ()
-applyAction audioVar currentTime event = case event.action of
-    SchedNoteOn p vel t -> modifyAudioPool $ poolNoteOn currentTime p vel t
-    SchedNoteOff p -> modifyAudioPool $ poolNoteOff currentTime p
-  where
-    modifyAudioPool f = modifyTVar' audioVar (\s -> s{pool = f s.pool})
+{- | Pure scheduler step. Returns the next state and the events that became
+due at @currentTime@. Tested directly without IO; 'schedulerThread' is a
+thin shell around this function plus an OSC send per due event.
+-}
+step :: Double -> SchedulerState -> (SchedulerState, [ScheduledEvent])
+step currentTime st =
+    let (due, remaining) = L.partition (\e -> e.time <= currentTime) st.pending
+        nextBeat = st.beat + Beat (secondsToBeats st.tempo st.lookAhead)
+        newEvents = eventsFromStream st st.beat nextBeat
+        merged = L.sortOn (.time) (remaining ++ newEvents)
+     in (st{beat = nextBeat, pending = merged}, due)
+
+applyAction :: SCConn -> ScheduledEvent -> IO ()
+applyAction sc event = case event.action of
+    SchedNoteOn p vel t -> SC.noteOn sc p vel t
+    SchedNoteOff p -> SC.noteOff sc p
 
 eventsFromStream :: SchedulerState -> Beat -> Beat -> [ScheduledEvent]
 eventsFromStream st fromBeat toBeat =
     concatMap (eventToActions st.tempo st.startTime) $
-        runStream st.stream fromBeat toBeat
+        query st.stream (Arc fromBeat toBeat)
 
 eventToActions :: Tempo -> Double -> Event Note -> [ScheduledEvent]
-eventToActions t start (Event b (Note p d v)) =
-    [ ScheduledEvent (start + beatToSeconds t (unBeat b)) (SchedNoteOn p v defaultTimbre)
-    , ScheduledEvent (start + beatToSeconds t (unBeat b + unDuration d)) (SchedNoteOff p)
+eventToActions t _start (Event w _part (Note p v)) =
+    [ ScheduledEvent (beatToSeconds t (unBeat w.start)) (SchedNoteOn p v defaultTimbre)
+    , ScheduledEvent (beatToSeconds t (unBeat w.end)) (SchedNoteOff p)
     ]
 
 beatToSeconds :: Tempo -> Rational -> Double

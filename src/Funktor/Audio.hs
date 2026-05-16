@@ -1,47 +1,29 @@
+{- | Convenience facade over "Funktor.Audio.SC". Holds the old @openDevice@ /
+@noteOn@ / @noteOff@ names so 'Funktor.Live' and ad-hoc REPL use don't have
+to think about whether the audio engine is local or remote.
+-}
 module Funktor.Audio (
     openDevice,
     closeDevice,
     noteOn,
     noteOff,
-
-    -- * Types
-    AudioState (..),
-    createAudioState,
+    SCConn,
 ) where
 
-import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO)
-import Funktor.Audio.Sine (sineCallback)
-import Funktor.Audio.State
+import Funktor.Audio.SC (SCConn)
+import Funktor.Audio.SC qualified as SC
 import Funktor.Audio.Timbre (Timbre)
-import Funktor.Audio.Voice (poolNoteOff, poolNoteOn)
 import Funktor.Core.Types (Pitch, Velocity)
-import SDL qualified
 
-openDevice :: IO (SDL.AudioDevice, TVar AudioState)
-openDevice = do
-    SDL.initialize [SDL.InitAudio]
-    stateVar <- newTVarIO createAudioState
-    (dev, _) <-
-        SDL.openAudioDevice
-            SDL.OpenDeviceSpec
-                { SDL.openDeviceFreq = SDL.Mandate 44100
-                , SDL.openDeviceFormat = SDL.Mandate SDL.FloatingLEAudio
-                , SDL.openDeviceChannels = SDL.Mandate SDL.Mono
-                , SDL.openDeviceSamples = 512
-                , SDL.openDeviceUsage = SDL.ForPlayback
-                , SDL.openDeviceName = Nothing
-                , SDL.openDeviceCallback = sineCallback stateVar
-                }
-    SDL.setAudioDevicePlaybackState dev SDL.Play
-    pure (dev, stateVar)
+-- | Connect to @scsynth@ on localhost:57110.
+openDevice :: IO SCConn
+openDevice = SC.connect SC.defaultPort
 
-closeDevice :: SDL.AudioDevice -> IO ()
-closeDevice = SDL.closeAudioDevice
+closeDevice :: SCConn -> IO ()
+closeDevice = SC.disconnect
 
-noteOn :: TVar AudioState -> Pitch -> Velocity -> Timbre -> IO ()
-noteOn stateVar p vel t = atomically $ modifyTVar' stateVar $ \s ->
-    s{pool = poolNoteOn s.time p vel t s.pool}
+noteOn :: SCConn -> Pitch -> Velocity -> Timbre -> IO ()
+noteOn = SC.noteOn
 
-noteOff :: TVar AudioState -> Pitch -> IO ()
-noteOff stateVar p = atomically $ modifyTVar' stateVar $ \s ->
-    s{pool = poolNoteOff s.time p s.pool}
+noteOff :: SCConn -> Pitch -> IO ()
+noteOff = SC.noteOff

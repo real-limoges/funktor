@@ -1,9 +1,10 @@
 {-# LANGUAGE CPP #-}
 
-{- | GHCi Live Interface for Funktor
+{- | GHCi Live Interface for Funktor.
 Provides interactive music control from GHCi using atomic stream swapping,
 optional MIDI input, Launchpad-driven grid play, and a file-watcher hook for
-live-coded edits.
+live-coded edits. Audio is rendered by an external @scsynth@ process; this
+module is the Haskell-side scheduler/control layer talking to it over OSC.
 -}
 module Funktor.Live (
     play,
@@ -28,7 +29,6 @@ module Funktor.Live (
     Stream,
     Note,
     Tempo (..),
-    fromPattern,
     pentatonic,
     silence,
     merge,
@@ -44,18 +44,15 @@ import Control.Concurrent.STM (
     readTVarIO,
     writeTVar,
  )
-import Funktor.Audio (closeDevice, openDevice)
+import Funktor.Audio (SCConn, closeDevice, openDevice)
+import Funktor.Audio.SC qualified as SC
 import Funktor.Audio.Scheduler (SchedulerState (..), initialSchedulerState, schedulerThread)
 import Funktor.Audio.Scheduler qualified as Scheduler
-import Funktor.Audio.State (AudioState (..))
-import Funktor.Audio.Voice (emptyPool)
-import Funktor.Core.Pattern (pentatonic)
-import Funktor.Core.Stream (Stream, fromPattern, merge, silence)
+import Funktor.Core.Stream (Stream, merge, pentatonic, silence)
 import Funktor.Core.Types (Note, Tempo (..))
 import Funktor.Grid.Binding (GridMode (..))
 import Funktor.Live.Reload (persistAt, startWatcher, stopWatcher)
 import GHC.Clock (getMonotonicTime)
-import SDL qualified
 import System.IO.Unsafe (unsafePerformIO)
 
 import Control.Concurrent.Async (Async)
@@ -107,10 +104,6 @@ import Funktor.Hardware.MIDI (
  )
 #endif
 
--- 'LiveState' carries every concurrency slot whether or not the @midi@
--- flag is on. Without MIDI the inner types collapse to '()' and the slots
--- are permanently 'Nothing'.
-
 #ifdef MIDI_ENABLED
 type MidiInputHandle = MidiInputThread
 type MidiRouterHandle = Async ()
@@ -150,9 +143,8 @@ data LiveState = LiveState
     { stream :: Stream Note
     , tempo :: !Tempo
     , schedVar :: !(TVar SchedulerState)
-    , audioVar :: !(TVar AudioState)
+    , scConn :: !SCConn
     , threadId :: !(Maybe ThreadId)
-    , device :: SDL.AudioDevice
     , midi :: !(Maybe MidiInputHandle)
     , midiRouter :: !(Maybe MidiRouterHandle)
     , midiQueue :: !(Maybe MidiQueueHandle)
@@ -185,10 +177,17 @@ reload = play
 
 bootSession :: Stream Note -> IO ()
 bootSession stream = do
-    (dev, audioVar) <- openDevice
+    sc <- openDevice
+    ok <- SC.statusOk sc
+    if ok
+        then pure ()
+        else
+            putStrLn $
+                "Funktor: scsynth did not respond on 127.0.0.1:57110."
+                    ++ " Boot SuperCollider and evaluate synthdefs/funktor.scd first."
     startTime <- getMonotonicTime
     schedVar <- newTVarIO (initialSchedulerState stream (Tempo 120) startTime)
-    tid <- forkIO (schedulerThread audioVar schedVar)
+    tid <- forkIO (schedulerThread sc schedVar)
     watcher <- startWatcher "."
     atomically $
         writeTVar globalLive $
@@ -197,9 +196,8 @@ bootSession stream = do
                     { stream = stream
                     , tempo = Tempo 120
                     , schedVar = schedVar
-                    , audioVar = audioVar
+                    , scConn = sc
                     , threadId = Just tid
-                    , device = dev
                     , midi = Nothing
                     , midiRouter = Nothing
                     , midiQueue = Nothing
@@ -241,9 +239,9 @@ stop = do
         Nothing -> putStrLn "Nothing playing."
         Just st -> do
             mapM_ killThread (st.threadId)
-            atomically $ modifyTVar' (st.audioVar) silenceAllVoices
+            SC.releaseAll (st.scConn)
+            closeDevice (st.scConn)
             atomically $ writeTVar globalLive Nothing
-            closeDevice (st.device)
 
 stopWatcherIfRunning :: IO ()
 stopWatcherIfRunning = do
@@ -270,10 +268,6 @@ setSchedTempo t s = s{tempo = t}
 
 setLiveTempo :: Tempo -> LiveState -> LiveState
 setLiveTempo t s = s{tempo = t}
-
--- | Silence all voices (helper for stop)
-silenceAllVoices :: AudioState -> AudioState
-silenceAllVoices st = st{pool = emptyPool}
 
 #ifdef MIDI_ENABLED
 
@@ -387,7 +381,7 @@ startLaunchpadWith lpCfg inCfg outCfg = do
                                 putStrLn ("Launchpad out: " ++ err ++ " — plug in before starting GHCi.")
                             Right outH -> do
                                 sendSysEx outH (programmerModeSysEx lpCfg)
-                                engine <- newAudioEngine (st.audioVar) (st.schedVar)
+                                engine <- newAudioEngine (st.schedVar)
                                 initialMode <- readTVarIO engine.mode
                                 sendSysEx outH (gridLedSysEx lpCfg (gridForMode initialMode))
                                 q <- newTQueueIO

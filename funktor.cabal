@@ -28,15 +28,9 @@ library
     import:           warnings
     exposed-modules:  Funktor
                       Funktor.Audio
-                      Funktor.Audio.State
-                      Funktor.Audio.Envelope
-                      Funktor.Audio.Effects
-                      Funktor.Audio.Oscillator
+                      Funktor.Audio.SC
                       Funktor.Audio.Scheduler
-                      Funktor.Audio.Voice
-                      Funktor.Audio.Sine
                       Funktor.Audio.Timbre
-                      Funktor.Core.Pattern
                       Funktor.Core.Stream
                       Funktor.Core.Types
                       Funktor.Generative.CellularAutomata
@@ -60,8 +54,8 @@ library
                     , containers >= 0.6
                     , foreign-store >= 0.2 && < 0.3
                     , fsnotify >= 0.4 && < 0.5
+                    , hosc >= 0.18 && < 0.22
                     , random >= 1.2
-                    , sdl2 >= 2.5
                     , stm >= 2.5
                     , vector >= 0.12
     hs-source-dirs:   src
@@ -96,17 +90,9 @@ test-suite funktor-test
     main-is:          Main.hs
     other-modules:    Test.Utils.Arbitrary
                       Core.TypesSpec
-                      Core.PatternSpec
                       Core.StreamSpec
-                      Audio.AudioSpec
-                      Audio.EffectsSpec
-                      Audio.EnvelopeSpec
-                      Audio.OscillatorSpec
                       Audio.SchedulerSpec
-                      Audio.SineSpec
-                      Audio.StateSpec
-                      Audio.VoiceSpec
-                      Audio.SineSpec
+                      Audio.TimbreSpec
                       Generative.CellularAutomataSpec
                       Generative.EuclideanSpec
                       Generative.MarkovSpec
@@ -134,7 +120,6 @@ test-suite funktor-test
         random >= 1.2,
         stm >= 2.5,
         vector >= 0.12,
-        sdl2 >= 2.5,
 
     if flag(midi)
         other-modules:   HardwareSpec

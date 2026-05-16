@@ -57,8 +57,9 @@ starting at beat 0; truncate by querying a finite window.
 runChain :: (Ord a) => MarkovChain a -> Duration -> a -> StdGen -> Stream a
 runChain chain (Duration stepDur) s gen =
     fromList
-        [ Event (Beat (stepDur * fromIntegral i)) v
+        [ event (Arc start_ (start_ + Beat stepDur)) v
         | (i, v) <- zip [0 :: Int .. 1024] (generate chain s gen)
+        , let start_ = Beat (stepDur * fromIntegral i)
         ]
 
 -- | Classic 12-bar jazz blues skeleton over C7: I7 → IV7 → I7 → V7 ii–V → I7.

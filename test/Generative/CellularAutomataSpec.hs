@@ -1,11 +1,14 @@
 module Generative.CellularAutomataSpec (tests) where
 
 import Data.Vector.Unboxed qualified as V
-import Funktor.Core.Pattern (Pattern (..))
+import Funktor.Core.Stream (query)
 import Funktor.Core.Types
 import Funktor.Generative.CellularAutomata
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
+
+oneCycle :: Beat -> Arc
+oneCycle d = Arc (Beat 0) d
 
 tests :: TestTree
 tests =
@@ -40,11 +43,11 @@ tests =
             rows !! 0 @?= [False, False, False, True, False, False, False]
             -- Generation 1: neighbours of the center fire
             rows !! 1 @?= [False, False, True, False, True, False, False]
-        , testCase "rowToPattern produces correct duration" $ do
+        , testCase "rowToStream emits one event per live cell" $ do
             let row = V.fromList [True, False, True, False]
-                p = rowToPattern (Note (Pitch 60) 1 1.0) row
-            p.duration @?= Duration 4
-            length p.events @?= 2
+                s = rowToStream (Note (Pitch 60) 1.0) row
+                evs = query s (oneCycle (Beat 4))
+            length evs @?= 2
         , testCase "columnDensity counts live cells per column" $ do
             let rs =
                     [ V.fromList [True, False, True]
@@ -52,10 +55,11 @@ tests =
                     , V.fromList [False, False, True]
                     ]
             columnDensity rs @?= [2, 1, 2]
-        , testCase "caRhythm rule30 5 has at least one event" $
-            assertBool "non-empty" (not (null (caRhythm rule30 5).events))
-        , testCase "caSequence returns one pattern per generation" $
+        , testCase "caRhythm rule30 5 has at least one event in one period" $ do
+            let evs = query (caRhythm rule30 5) (oneCycle (Beat 5))
+            assertBool "non-empty" (not (null evs))
+        , testCase "caSequence returns one stream per generation" $
             length (caSequence rule30 4 5) @?= 4
-        , testCase "caPattern empty pitches is empty pattern" $
-            (caPattern rule30 3 5 []).events @?= []
+        , testCase "caStream with empty pitches is silence" $
+            query (caStream rule30 3 5 []) (oneCycle (Beat 15)) @?= []
         ]

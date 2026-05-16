@@ -42,24 +42,56 @@ newtype Velocity = Velocity {unVelocity :: Double}
 velocityToAmplitude :: Velocity -> Double
 velocityToAmplitude (Velocity v) = v * v
 
+{- | A half-open time interval @[start, end)@ in beats. Used as the query
+window for 'Funktor.Core.Stream.Stream' and as both the @whole@ and @part@
+extents of an 'Event'.
+-}
+data Arc = Arc
+    { start :: !Beat
+    , end :: !Beat
+    }
+    deriving (Eq, Ord, Show)
+
+arcLength :: Arc -> Beat
+arcLength a = a.end - a.start
+
+shiftArc :: Beat -> Arc -> Arc
+shiftArc o (Arc s e) = Arc (s + o) (e + o)
+
+scaleArc :: Rational -> Arc -> Arc
+scaleArc k (Arc (Beat s) (Beat e)) = Arc (Beat (s * k)) (Beat (e * k))
+
+{- | A timed value with Tidal-style @whole@/@part@ arcs. @whole@ is the
+event's true extent (e.g. note on→off); @part@ is the slice returned by the
+current 'Stream' query, possibly cropped to a smaller window. For uncropped
+events the two are equal.
+-}
 data Event a = Event
-    { beat :: !Beat
+    { whole :: !Arc
+    , part :: !Arc
     , value :: !a
     }
     deriving (Eq, Ord, Show, Functor)
 
-mapEventTime :: (Beat -> Beat) -> Event a -> Event a
-mapEventTime f (Event t v) = Event (f t) v
+-- | Build an 'Event' whose @whole@ and @part@ are equal — the common case.
+event :: Arc -> a -> Event a
+event a v = Event a a v
+
+shiftEvent :: Beat -> Event a -> Event a
+shiftEvent o (Event w p v) = Event (shiftArc o w) (shiftArc o p) v
 
 mapEventValue :: (a -> b) -> Event a -> Event b
 mapEventValue = fmap
 
+{- | A pitched note with velocity. Duration lives on the containing
+'Event' (via @whole@), not on the note itself — note-shape stays
+independent of how long it's held.
+-}
 data Note = Note
     { pitch :: !Pitch
-    , duration :: !Duration
     , velocity :: !Velocity
     }
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 newtype ScaleDegree = ScaleDegree {unScaleDegree :: Int}
     deriving (Eq, Ord, Show)

@@ -1,7 +1,7 @@
 module Generative.MarkovSpec (tests) where
 
 import Data.Map.Strict qualified as Map
-import Funktor.Core.Stream (runStream)
+import Funktor.Core.Stream (query)
 import Funktor.Core.Types
 import Funktor.Generative.Markov
 import System.Random (mkStdGen)
@@ -40,8 +40,8 @@ tests =
              in walk @?= [0, 1, 2, 0, 1, 2, 0]
         , testCase "runChain materialises events at stepDur beats" $
             let s = runChain simpleChain (Duration 2) 0 (mkStdGen 1)
-                evs = runStream s (Beat 0) (Beat 8)
-             in map (.beat) evs @?= [Beat 0, Beat 2, Beat 4, Beat 6]
+                evs = query s (Arc (Beat 0) (Beat 8))
+             in map (.part.start) evs @?= [Beat 0, Beat 2, Beat 4, Beat 6]
         , testCase "jazzBluesChain includes ii-V-I motion" $
             let i7 = ChordSymbol (Pitch 60) Dominant7
                 walk = take 100 (generate jazzBluesChain i7 (mkStdGen 7))

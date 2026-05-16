@@ -23,12 +23,26 @@ tests =
             let f = (+ 1) :: Int -> Int
                 g = (* 2) :: Int -> Int
              in fmap (f . g) e == (fmap f . fmap g) e
-        , testCase "mapEventTime shifts beat" $ do
-            let ev = Event (Beat 1) "x"
-                ev' = mapEventTime (+ Beat 2) ev
-            ev'.beat @?= Beat 3
+        , testCase "event helper sets whole == part" $ do
+            let a = Arc (Beat 1) (Beat 3)
+                ev = event a "x"
+            ev.whole @?= a
+            ev.part @?= a
+            ev.value @?= "x"
+        , testCase "shiftEvent shifts both arcs by the same offset" $ do
+            let a = Arc (Beat 1) (Beat 3)
+                ev = event a "x"
+                ev' = shiftEvent (Beat 2) ev
+            ev'.whole @?= Arc (Beat 3) (Beat 5)
+            ev'.part @?= Arc (Beat 3) (Beat 5)
+        , testCase "shiftArc moves both endpoints" $
+            shiftArc (Beat 2) (Arc (Beat 1) (Beat 4)) @?= Arc (Beat 3) (Beat 6)
+        , testCase "scaleArc multiplies both endpoints" $
+            scaleArc 0.5 (Arc (Beat 2) (Beat 6)) @?= Arc (Beat 1) (Beat 3)
+        , testCase "arcLength is end - start" $
+            arcLength (Arc (Beat 1) (Beat 4)) @?= Beat 3
         , testCase "mapEventValue applies" $ do
-            let ev = Event (Beat 0) (5 :: Int)
+            let ev = event (Arc 0 1) (5 :: Int)
                 ev' = mapEventValue (+ 1) ev
             ev'.value @?= 6
         , testCase "beatsToSeconds at 120 BPM" $
