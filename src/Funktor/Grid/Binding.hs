@@ -10,23 +10,16 @@ The top control row (Launchpad y == 8) is handled by the caller (the
 Launchpad router in 'Funktor.Live') using 'topRowModeSwitch'.
 -}
 module Funktor.Grid.Binding (
-    -- * Engine handle
     AudioEngine (..),
     newAudioEngine,
-
-    -- * Modes
     GridMode (..),
     SequencerState (..),
     InstrumentConfig (..),
     defaultSequencerState,
     defaultInstrumentConfig,
     setMode,
-
-    -- * Pad event handlers
     pressPad,
     releasePad,
-
-    -- * Pure helpers
     defaultGrid,
     sequencerStream,
     gridForMode,
@@ -61,41 +54,35 @@ import Funktor.Core.Types (
  )
 import Funktor.Grid (Color (..), Grid (..), Pad (..), PadAction (..), emptyGrid, setPad)
 
--- ---------------------------------------------------------------------------
--- Engine handle + modes
--- ---------------------------------------------------------------------------
-
--- | The audio engine handles a 'Grid.Binding' touches.
 data AudioEngine = AudioEngine
-    { engineAudioVar :: !(TVar AudioState)
-    , engineSchedVar :: !(TVar SchedulerState)
-    , engineMode :: !(TVar GridMode)
+    { audioVar :: !(TVar AudioState)
+    , schedVar :: !(TVar SchedulerState)
+    , mode :: !(TVar GridMode)
     }
 
--- | The active dispatch mode for an 'AudioEngine'.
 data GridMode
     = SequencerMode !SequencerState
     | InstrumentMode !InstrumentConfig
     | SceneMode !(Map (Int, Int) (Stream Note))
 
 {- | An 8x8 toggle grid plus the pitch row and step-duration parameters that
-turn it into a 'Stream Note'. Row 0 is the bottom row and plays 'seqRoot';
-row @i@ adds @seqScale !! i@ semitones.
+turn it into a 'Stream Note'. Row 0 is the bottom row and plays 'root';
+row @i@ adds @scale !! i@ semitones.
 -}
 data SequencerState = SequencerState
-    { seqSteps :: !(V.Vector (V.Vector Bool))
-    , seqRoot :: !Pitch
-    , seqScale :: ![Int]
-    , seqStepDur :: !Duration
+    { steps :: !(V.Vector (V.Vector Bool))
+    , root :: !Pitch
+    , scale :: ![Int]
+    , stepDur :: !Duration
     }
     deriving (Eq, Show)
 
 -- | Pitch geometry for 'InstrumentMode'.
 data InstrumentConfig = InstrumentConfig
-    { instRoot :: !Pitch
-    , instStep :: !Int
+    { root :: !Pitch
+    , step :: !Int
     -- ^ semitones between adjacent columns
-    , instRowStep :: !Int
+    , rowStep :: !Int
     -- ^ semitones between adjacent rows
     }
     deriving (Eq, Show)
@@ -106,38 +93,29 @@ fill 8 rows), one-beat steps.
 defaultSequencerState :: SequencerState
 defaultSequencerState =
     SequencerState
-        { seqSteps = V.replicate 8 (V.replicate 8 False)
-        , seqRoot = Pitch 48
-        , seqScale = [0, 2, 3, 7, 8, 12, 14, 15]
-        , seqStepDur = Duration 1
+        { steps = V.replicate 8 (V.replicate 8 False)
+        , root = Pitch 48
+        , scale = [0, 2, 3, 7, 8, 12, 14, 15]
+        , stepDur = Duration 1
         }
 
 -- | Instrument mode rooted at C2, one semitone per column, fifths per row.
 defaultInstrumentConfig :: InstrumentConfig
 defaultInstrumentConfig =
     InstrumentConfig
-        { instRoot = Pitch 36
-        , instStep = 1
-        , instRowStep = 5
+        { root = Pitch 36
+        , step = 1
+        , rowStep = 5
         }
 
--- ---------------------------------------------------------------------------
--- IO surface
--- ---------------------------------------------------------------------------
-
 newAudioEngine :: TVar AudioState -> TVar SchedulerState -> IO AudioEngine
-newAudioEngine audioVar schedVar = do
+newAudioEngine av sv = do
     modeVar <- newTVarIO (InstrumentMode defaultInstrumentConfig)
-    pure
-        AudioEngine
-            { engineAudioVar = audioVar
-            , engineSchedVar = schedVar
-            , engineMode = modeVar
-            }
+    pure AudioEngine{audioVar = av, schedVar = sv, mode = modeVar}
 
 -- | Swap the dispatch mode. LED redraw is the caller's responsibility.
 setMode :: AudioEngine -> GridMode -> IO ()
-setMode e m = atomically (writeTVar (engineMode e) m)
+setMode e m = atomically (writeTVar e.mode m)
 
 {- | Dispatch a pad-down event according to the current 'GridMode'. In
 'SequencerMode' the step toggles and the resulting stream is hot-swapped;
@@ -146,16 +124,16 @@ in 'InstrumentMode' a 'SchedNoteOn' is enqueued; in 'SceneMode' the stored
 -}
 pressPad :: Int -> Int -> AudioEngine -> Velocity -> IO ()
 pressPad x y e vel = atomically $ do
-    mode <- readTVar (engineMode e)
-    case mode of
+    m <- readTVar e.mode
+    case m of
         InstrumentMode cfg ->
-            enqueueImmediate (engineSchedVar e) (SchedNoteOn (padToPitch cfg x y) vel)
+            enqueueImmediate e.schedVar (SchedNoteOn (padToPitch cfg x y) vel)
         SequencerMode st -> do
             let st' = setStep x y st
-            modifyTVar' (engineMode e) (const (SequencerMode st'))
-            hotSwap (engineSchedVar e) (sequencerStream st')
-        SceneMode m -> case Map.lookup (x, y) m of
-            Just s -> hotSwap (engineSchedVar e) s
+            modifyTVar' e.mode (const (SequencerMode st'))
+            hotSwap e.schedVar (sequencerStream st')
+        SceneMode m' -> case Map.lookup (x, y) m' of
+            Just s -> hotSwap e.schedVar s
             Nothing -> pure ()
 
 {- | Dispatch a pad-up event. Only 'InstrumentMode' acts on releases (sending
@@ -164,39 +142,35 @@ and scene playback continues until another scene is launched.
 -}
 releasePad :: Int -> Int -> AudioEngine -> IO ()
 releasePad x y e = do
-    mode <- readTVarIO (engineMode e)
-    case mode of
+    m <- readTVarIO e.mode
+    case m of
         InstrumentMode cfg ->
             atomically $
-                enqueueImmediate (engineSchedVar e) (SchedNoteOff (padToPitch cfg x y))
+                enqueueImmediate e.schedVar (SchedNoteOff (padToPitch cfg x y))
         _ -> pure ()
-
--- ---------------------------------------------------------------------------
--- Pure helpers
--- ---------------------------------------------------------------------------
 
 -- | The 8x8 musical surface of a Launchpad Mk3, blank.
 defaultGrid :: Grid
 defaultGrid = emptyGrid 8 8
 
 {- | Build a looping 'Stream Note' from a 'SequencerState'. Column index is
-time (in 'seqStepDur' increments); row index is pitch (via 'seqRoot' +
-'seqScale'). One full revolution lasts @width * seqStepDur@ beats.
+time (in 'stepDur' increments); row index is pitch (via 'root' + 'scale').
+One full revolution lasts @width * stepDur@ beats.
 -}
 sequencerStream :: SequencerState -> Stream Note
 sequencerStream st
-    | V.null (seqSteps st) = silence
+    | V.null st.steps = silence
     | otherwise = fromPattern (Pattern evts patDur)
   where
-    width = V.length (V.head (seqSteps st))
-    stepBeats = unDuration (seqStepDur st)
-    patDur = seqStepDur st * Duration (fromIntegral width)
-    rowPitch i = case drop i (seqScale st) of
-        offset : _ -> seqRoot st + Pitch offset
-        [] -> seqRoot st
+    w = V.length (V.head st.steps)
+    stepBeats = unDuration st.stepDur
+    patDur = st.stepDur * Duration (fromIntegral w)
+    rowPitch i = case drop i st.scale of
+        offset : _ -> st.root + Pitch offset
+        [] -> st.root
     evts =
-        [ Event (Beat (fromIntegral col * stepBeats)) (Note (rowPitch row) (seqStepDur st) (Velocity 0.7))
-        | (row, cells) <- zip [0 :: Int ..] (V.toList (seqSteps st))
+        [ Event (Beat (fromIntegral col * stepBeats)) (Note (rowPitch row) st.stepDur (Velocity 0.7))
+        | (row, cells) <- zip [0 :: Int ..] (V.toList st.steps)
         , (col, True) <- zip [0 :: Int ..] (V.toList cells)
         ]
 
@@ -210,42 +184,39 @@ topRowModeSwitch col = case col of
     2 -> Just (SceneMode Map.empty)
     _ -> Nothing
 
-{- | LED state for a mode's pads.  Used to repaint the whole Launchpad on
+{- | LED state for a mode's pads. Used to repaint the whole Launchpad on
 mode change.
 -}
 gridForMode :: GridMode -> Grid
-gridForMode mode = case mode of
-    InstrumentMode _ -> paintAll Cyan
+gridForMode m = case m of
+    InstrumentMode _ ->
+        (emptyGrid 8 8){pads = replicate 8 (replicate 8 (Pad NoAction Cyan))}
     SequencerMode st ->
-        let g0 = emptyGrid 8 8
-            toggled =
+        let toggled =
                 [ (col, row)
-                | (row, cells) <- zip [0 :: Int ..] (V.toList (seqSteps st))
+                | (row, cells) <- zip [0 :: Int ..] (V.toList st.steps)
                 , (col, True) <- zip [0 :: Int ..] (V.toList cells)
                 ]
-         in foldr (\(x, y) g -> setPad x y (Pad NoAction Yellow) g) g0 toggled
-    SceneMode m ->
-        let g0 = emptyGrid 8 8
-         in foldr (\(x, y) g -> setPad x y (Pad NoAction Yellow) g) g0 (Map.keys m)
+         in foldr lightYellow (emptyGrid 8 8) toggled
+    SceneMode scenes ->
+        foldr lightYellow (emptyGrid 8 8) (Map.keys scenes)
   where
-    paintAll c =
-        let row = replicate 8 (Pad NoAction c)
-         in (emptyGrid 8 8){gridPads = replicate 8 row}
+    lightYellow (x, y) = setPad x y (Pad NoAction Yellow)
 
 -- | Compute the pitch a pad triggers in 'InstrumentMode'.
 padToPitch :: InstrumentConfig -> Int -> Int -> Pitch
 padToPitch cfg x y =
-    instRoot cfg + Pitch (x * instStep cfg + y * instRowStep cfg)
+    cfg.root + Pitch (x * cfg.step + y * cfg.rowStep)
 
 {- | Flip the cell at @(x, y)@ in a 'SequencerState'. Out-of-bounds coords
 are a no-op (matching 'setPad' in "Funktor.Grid").
 -}
 setStep :: Int -> Int -> SequencerState -> SequencerState
 setStep x y st
-    | y < 0 || y >= V.length (seqSteps st) = st
-    | x < 0 || x >= V.length (seqSteps st V.! y) = st
+    | y < 0 || y >= V.length st.steps = st
+    | x < 0 || x >= V.length (st.steps V.! y) = st
     | otherwise =
-        let row = seqSteps st V.! y
+        let row = st.steps V.! y
             row' = row V.// [(x, not (row V.! x))]
-            steps' = seqSteps st V.// [(y, row')]
-         in st{seqSteps = steps'}
+            steps' = st.steps V.// [(y, row')]
+         in st{steps = steps'}

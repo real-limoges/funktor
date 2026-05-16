@@ -6,7 +6,6 @@ module Funktor.Audio.Voice (
     isVoiceDone,
     poolNoteOn,
     poolNoteOff,
-    nextAge,
     cleanupVoices,
     findSlot,
 ) where
@@ -17,19 +16,19 @@ import Funktor.Audio.Envelope (EnvelopeParams (..))
 import Funktor.Core.Types (Pitch, Velocity, midiToFreq)
 
 data Voice = Voice
-    { voicePitch :: !Pitch
-    , voiceFreq :: !Double
-    , voicePhase :: !Double
-    , voiceVelocity :: !Velocity
-    , voiceNoteOnAt :: !Double
-    , voiceNoteOffAt :: !(Maybe Double)
-    , voiceAge :: !Int
+    { pitch :: !Pitch
+    , freq :: !Double
+    , phase :: !Double
+    , velocity :: !Velocity
+    , noteOnAt :: !Double
+    , noteOffAt :: !(Maybe Double)
+    , age :: !Int
     }
     deriving (Show)
 
 data VoicePool = VoicePool
-    { poolVoices :: !(V.Vector (Maybe Voice))
-    , poolNextAge :: !Int
+    { voices :: !(V.Vector (Maybe Voice))
+    , nextAge :: !Int
     }
     deriving (Show)
 
@@ -39,56 +38,58 @@ maxVoices = 8
 emptyPool :: VoicePool
 emptyPool = VoicePool (V.replicate maxVoices Nothing) 0
 
+{- | A voice is reclaimable once it has been released for the full envelope
+release plus a 100ms tail. The tail keeps a slot reserved across one or two
+extra audio buffers so the release curve isn't truncated by wall-clock jitter
+between the scheduler tick and the next callback.
+-}
 isVoiceDone :: EnvelopeParams -> Double -> Voice -> Bool
-isVoiceDone params currentTime voice = case voiceNoteOffAt voice of
+isVoiceDone params currentTime voice = case voice.noteOffAt of
     Nothing -> False
-    Just t -> (currentTime - t) >= envRelease params + 0.1
+    Just t -> (currentTime - t) >= params.release + 0.1
 
 poolNoteOn :: Double -> Pitch -> Velocity -> VoicePool -> VoicePool
-poolNoteOn currentTime pitch velocity pool =
+poolNoteOn currentTime p v pool =
     pool
-        { poolVoices = poolVoices pool V.// [(findSlot pool, Just newVoice)]
-        , poolNextAge = poolNextAge pool + 1
+        { voices = pool.voices V.// [(findSlot pool, Just newVoice)]
+        , nextAge = pool.nextAge + 1
         }
   where
     newVoice =
         Voice
-            { voicePitch = pitch
-            , voiceFreq = midiToFreq pitch
-            , voicePhase = 0
-            , voiceVelocity = velocity
-            , voiceNoteOnAt = currentTime
-            , voiceNoteOffAt = Nothing
-            , voiceAge = poolNextAge pool
+            { pitch = p
+            , freq = midiToFreq p
+            , phase = 0
+            , velocity = v
+            , noteOnAt = currentTime
+            , noteOffAt = Nothing
+            , age = pool.nextAge
             }
 
 poolNoteOff :: Double -> Pitch -> VoicePool -> VoicePool
-poolNoteOff currentTime pitch pool =
-    pool{poolVoices = V.map (fmap markOff) (poolVoices pool)}
+poolNoteOff currentTime p pool =
+    pool{voices = V.map (fmap markOff) pool.voices}
   where
     markOff voice
-        | voicePitch voice == pitch = voice{voiceNoteOffAt = Just currentTime}
+        | voice.pitch == p = voice{noteOffAt = Just currentTime}
         | otherwise = voice
 
 findSlot :: VoicePool -> Int
-findSlot pool = case V.findIndex isNothing (poolVoices pool) of
+findSlot pool = case V.findIndex isNothing pool.voices of
     Just i -> i
-    Nothing -> oldestSlot (poolVoices pool)
+    Nothing -> oldestSlot pool.voices
 
 oldestSlot :: V.Vector (Maybe Voice) -> Int
-oldestSlot voices = snd $ V.ifoldl' step (maxBound, 0) voices
+oldestSlot vs = snd $ V.ifoldl' step (maxBound, 0) vs
   where
     step acc@(minAge, _) i (Just v)
-        | voiceAge v < minAge = (voiceAge v, i)
+        | v.age < minAge = (v.age, i)
         | otherwise = acc
     step acc _ Nothing = acc
 
 cleanupVoices :: EnvelopeParams -> Double -> VoicePool -> VoicePool
 cleanupVoices params currentTime pool =
-    pool{poolVoices = V.map clear (poolVoices pool)}
+    pool{voices = V.map clear pool.voices}
   where
     clear (Just v) | isVoiceDone params currentTime v = Nothing
     clear mv = mv
-
-nextAge :: VoicePool -> Int
-nextAge = poolNextAge

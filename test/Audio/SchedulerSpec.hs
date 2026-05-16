@@ -16,10 +16,10 @@ tests =
         [ testCase "initialSchedulerState carries its inputs" $
             let st = initialSchedulerState oneNoteStream (Tempo 120) 0
              in do
-                    schedTempo st @?= Tempo 120
-                    schedStartTime st @?= 0
-                    schedBeat st @?= Beat 0
-                    assertBool "no pending events" (null (schedPending st))
+                    st.tempo @?= Tempo 120
+                    st.startTime @?= 0
+                    st.beat @?= Beat 0
+                    assertBool "no pending events" (null st.pending)
         , testCase "lookahead default is 100ms" $
-            schedLookAhead (initialSchedulerState oneNoteStream (Tempo 120) 0) @?= 0.1
+            (initialSchedulerState oneNoteStream (Tempo 120) 0).lookAhead @?= 0.1
         ]

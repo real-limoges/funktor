@@ -16,29 +16,25 @@ bufferSize :: Int
 bufferSize = 512
 
 data OscState = OscState
-    { oscFreq :: !Double
-    , oscPhase :: !Double
-    , oscAmplitude :: !Double
+    { freq :: !Double
+    , phase :: !Double
+    , amplitude :: !Double
     }
     deriving (Show)
 
 data AudioState = AudioState
-    { audioOsc :: !OscState
-    , audioEnvelope :: !EnvelopeParams
-    , audioNoteOnAt :: !(Maybe Double)
-    , audioNoteOffAt :: !(Maybe Double)
-    , audioTime :: !Double
-    , audioPool :: !VoicePool
+    { osc :: !OscState
+    , envelope :: !EnvelopeParams
+    , time :: !Double
+    , pool :: !VoicePool
     }
     deriving (Show)
 
 createSineAudioState :: Double -> Double -> AudioState
-createSineAudioState freq amp =
+createSineAudioState f amp =
     AudioState
-        { audioOsc = OscState freq 0.0 amp
-        , audioEnvelope = defaultEnvelope
-        , audioNoteOnAt = Nothing
-        , audioNoteOffAt = Nothing
-        , audioTime = 0.0
-        , audioPool = emptyPool
+        { osc = OscState f 0.0 amp
+        , envelope = defaultEnvelope
+        , time = 0.0
+        , pool = emptyPool
         }

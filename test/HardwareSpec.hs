@@ -155,14 +155,14 @@ stepRxTests =
         [ testCase "single-event sysex in one packet" $
             let evs = [event [0xF0, 0x7E, 0x06, 0xF7]]
                 (msgs, st) = stepRx initialRxState evs
-             in (msgs, rxInSysEx st) @?= ([SysEx [0x7E, 0x06]], False)
+             in (msgs, st.inSysEx) @?= ([SysEx [0x7E, 0x06]], False)
         , testCase "multi-packet sysex reassembles in order" $
             let evs =
                     [ event [0xF0, 0x7E, 0x06, 0x01]
                     , event [0x02, 0x03, 0xF7, 0x00]
                     ]
                 (msgs, st) = stepRx initialRxState evs
-             in (msgs, rxInSysEx st)
+             in (msgs, st.inSysEx)
                     @?= ([SysEx [0x7E, 0x06, 0x01, 0x02, 0x03]], False)
         , testCase "real-time status interleaved mid-sysex" $
             let evs =

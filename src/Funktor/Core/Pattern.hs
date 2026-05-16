@@ -1,31 +1,17 @@
-{--
-Finite Musical ideas with a known length. Repeatable.
-Building blocks to form emergent music.
---}
-
 module Funktor.Core.Pattern
 where
 
 import Data.List (sortOn)
 import Funktor.Core.Types
 
-----------------
---  Patterns
-----------------
-
 data Pattern a = Pattern
-    { patternEvents :: ![Event a] -- Events sorted by time
-    , patternDuration :: !Duration -- length in beats
+    { events :: ![Event a]
+    , duration :: !Duration
     }
     deriving (Eq, Show, Functor)
 
--- sorts events and makes it into a pattern
 pattern_ :: Duration -> [Event a] -> Pattern a
-pattern_ dur evts = Pattern (sortOn eventBeat evts) dur
-
-----------------------
---   Construction
-----------------------
+pattern_ dur evts = Pattern (sortOn (.beat) evts) dur
 
 empty :: Pattern a
 empty = Pattern [] 0
@@ -42,22 +28,8 @@ note p d v = singleton d (Note p d v)
 notes :: Duration -> [(Beat, Note)] -> Pattern Note
 notes dur pairs = pattern_ dur [Event b n | (b, n) <- pairs]
 
-----------------------
--- Helper Functions
-----------------------
-
-events :: Pattern a -> [Event a]
-events = patternEvents
-
-duration :: Pattern a -> Duration
-duration = patternDuration
-
 isEmpty :: Pattern a -> Bool
-isEmpty = null . patternEvents
-
-------------------
--- Composition
-------------------
+isEmpty p = null p.events
 
 shift :: Beat -> Pattern a -> Pattern a
 shift offset (Pattern evts dur) =
@@ -83,25 +55,20 @@ append (Pattern evts1 dur1) (Pattern evts2 dur2) =
 
 stack :: Pattern a -> Pattern a -> Pattern a
 stack (Pattern evts1 dur1) (Pattern evts2 dur2) =
-    Pattern (sortOn eventBeat $ evts1 ++ evts2) (max dur1 dur2)
+    Pattern (sortOn (.beat) $ evts1 ++ evts2) (max dur1 dur2)
 
--- tail-optimized recursion
 repeat_ :: Int -> Pattern a -> Pattern a
 repeat_ n pat
     | n <= 0 = empty
     | n == 1 = pat
     | otherwise = pat `append` repeat_ (n - 1) pat
 
---------------------
--- Common Patterns
---------------------
-
 pentatonicIntervals :: [Int]
 pentatonicIntervals = [0, 3, 5, 7, 10]
 
 pentatonic :: Octave -> Pattern Note
-pentatonic oct = Pattern (zipWith stepNote [0 :: Int ..] pentatonicIntervals) 5
+pentatonic oct = Pattern (zipWith mkEvent [0 :: Int ..] pentatonicIntervals) 5
   where
     baseMidi = 60 + (oct - 4) * 12
-    stepNote i interval =
+    mkEvent i interval =
         Event (Beat (fromIntegral i)) (Note (Pitch (baseMidi + interval)) 1 0.7)

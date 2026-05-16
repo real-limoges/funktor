@@ -26,11 +26,11 @@ tests =
         , testCase "mapEventTime shifts beat" $ do
             let ev = Event (Beat 1) "x"
                 ev' = mapEventTime (+ Beat 2) ev
-            eventBeat ev' @?= Beat 3
+            ev'.beat @?= Beat 3
         , testCase "mapEventValue applies" $ do
             let ev = Event (Beat 0) (5 :: Int)
                 ev' = mapEventValue (+ 1) ev
-            eventValue ev' @?= 6
+            ev'.value @?= 6
         , testCase "beatsToSeconds at 120 BPM" $
             -- 1 beat at 120 BPM = 0.5s
             beatsToSeconds (Tempo 120) 1 @?= 0.5

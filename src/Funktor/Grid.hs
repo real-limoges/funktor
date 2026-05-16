@@ -31,29 +31,28 @@ data PadAction
 
 -- | A single pad: an action and a colour.
 data Pad = Pad
-    { padAction :: PadAction
-    , padColor :: Color
+    { action :: PadAction
+    , color :: Color
     }
     deriving (Eq, Show)
 
 {- | An arbitrary-size grid of pads stored in row-major order.
-'gridPads !! y !! x' gives the pad at column x, row y.
+@g.pads !! y !! x@ gives the pad at column x, row y.
 -}
 data Grid = Grid
-    { gridPads :: ![[Pad]]
-    , gridWidth :: !Int
-    , gridHeight :: !Int
+    { pads :: ![[Pad]]
+    , width :: !Int
+    , height :: !Int
     }
     deriving (Eq, Show)
 
--- | Create a blank grid with every pad set to 'NoAction' and 'Off'.
 emptyGrid :: Int -> Int -> Grid
 emptyGrid w h = Grid (replicate h (replicate w (Pad NoAction Off))) w h
 
 setPad :: Int -> Int -> Pad -> Grid -> Grid
 setPad x y pad g
-    | x < 0 || y < 0 || x >= gridWidth g || y >= gridHeight g = g
-    | otherwise = g{gridPads = updateRow y (updateCell x pad) (gridPads g)}
+    | x < 0 || y < 0 || x >= g.width || y >= g.height = g
+    | otherwise = g{pads = updateRow y (updateCell x pad) g.pads}
 
 updateCell :: Int -> Pad -> [Pad] -> [Pad]
 updateCell x pad = zipWith (\i p -> if i == x then pad else p) [0 ..]
@@ -63,8 +62,8 @@ updateRow y f = zipWith (\i r -> if i == y then f r else r) [0 ..]
 
 getPad :: Int -> Int -> Grid -> Maybe Pad
 getPad x y g
-    | x < 0 || y < 0 || x >= gridWidth g || y >= gridHeight g = Nothing
-    | otherwise = getNested (gridPads g) y x
+    | x < 0 || y < 0 || x >= g.width || y >= g.height = Nothing
+    | otherwise = getNested g.pads y x
   where
     getNested :: [[Pad]] -> Int -> Int -> Maybe Pad
     getNested [] _ _ = Nothing

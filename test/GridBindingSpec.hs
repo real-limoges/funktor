@@ -22,7 +22,7 @@ import Funktor.Core.Types (
     Tempo (..),
     Velocity (..),
  )
-import Funktor.Grid (Color (..), Pad (..), gridPads)
+import Funktor.Grid (Color (..), Grid (..), Pad (..))
 import Funktor.Grid.Binding (
     AudioEngine (..),
     GridMode (..),
@@ -86,26 +86,26 @@ sequencerStreamTests =
         [ testCase "two toggled cells fire at expected beats and pitches" $
             let st =
                     SequencerState
-                        { seqSteps =
+                        { steps =
                             V.fromList
                                 [ V.fromList [True, False]
                                 , V.fromList [False, True]
                                 ]
-                        , seqRoot = Pitch 60
-                        , seqScale = [0, 2]
-                        , seqStepDur = Duration 1
+                        , root = Pitch 60
+                        , scale = [0, 2]
+                        , stepDur = Duration 1
                         }
                 evts = sample (sequencerStream st) (Beat 0) (Beat 2)
-                pitchAt b = eventValue <$> lookup b [(eventBeat e, e) | e <- evts]
-             in (notePitch <$> pitchAt (Beat 0), notePitch <$> pitchAt (Beat 1))
+                pitchAt b = (.value) <$> lookup b [(e.beat, e) | e <- evts]
+             in ((.pitch) <$> pitchAt (Beat 0), (.pitch) <$> pitchAt (Beat 1))
                     @?= (Just (Pitch 60), Just (Pitch 62))
         , testCase "all-off grid produces silence over query window" $
             let st =
                     SequencerState
-                        { seqSteps = V.replicate 4 (V.replicate 4 False)
-                        , seqRoot = Pitch 60
-                        , seqScale = [0, 2, 4, 5]
-                        , seqStepDur = Duration 1
+                        { steps = V.replicate 4 (V.replicate 4 False)
+                        , root = Pitch 60
+                        , scale = [0, 2, 4, 5]
+                        , stepDur = Duration 1
                         }
              in sample (sequencerStream st) (Beat 0) (Beat 4) @?= []
         , testCase "empty step grid is silence" $
@@ -116,10 +116,10 @@ sequencerStreamTests =
     sample = runStream
     emptySeq =
         SequencerState
-            { seqSteps = V.empty
-            , seqRoot = Pitch 60
-            , seqScale = []
-            , seqStepDur = Duration 1
+            { steps = V.empty
+            , root = Pitch 60
+            , scale = []
+            , stepDur = Duration 1
             }
 
 gridForModeTests :: TestTree
@@ -132,11 +132,11 @@ gridForModeTests =
         , testCase "empty Sequencer leaves everything Off" $
             allColors
                 ( gridForMode
-                    (SequencerMode (defaultSeq{seqSteps = V.replicate 8 (V.replicate 8 False)}))
+                    (SequencerMode (defaultSeq{steps = V.replicate 8 (V.replicate 8 False)}))
                 )
                 @?= replicate 64 Off
         , testCase "Sequencer with one toggled step lights one Yellow" $
-            let st = defaultSeq{seqSteps = oneToggle 2 3}
+            let st = defaultSeq{steps = oneToggle 2 3}
                 colors = allColors (gridForMode (SequencerMode st))
                 yellowCount = length (filter (== Yellow) colors)
              in yellowCount @?= 1
@@ -146,13 +146,13 @@ gridForModeTests =
              in length (filter (== Yellow) colors) @?= 2
         ]
   where
-    allColors g = [padColor p | row <- gridPads g, p <- row]
+    allColors g = [p.color | row <- g.pads, p <- row]
     defaultSeq =
         SequencerState
-            { seqSteps = V.replicate 8 (V.replicate 8 False)
-            , seqRoot = Pitch 60
-            , seqScale = [0, 2, 4, 5, 7, 9, 11, 12]
-            , seqStepDur = Duration 1
+            { steps = V.replicate 8 (V.replicate 8 False)
+            , root = Pitch 60
+            , scale = [0, 2, 4, 5, 7, 9, 11, 12]
+            , stepDur = Duration 1
             }
     oneToggle x y =
         V.generate 8 $ \r ->
@@ -175,10 +175,10 @@ setStepTests =
         [ testCase "toggling twice returns to original state" $
             let st = SequencerState (V.fromList [V.fromList [False, False]]) (Pitch 60) [0] (Duration 1)
                 st' = setStep 0 0 (setStep 0 0 st)
-             in seqSteps st' @?= seqSteps st
+             in st'.steps @?= st.steps
         , testCase "out-of-bounds is a no-op" $
             let st = SequencerState (V.fromList [V.fromList [False]]) (Pitch 60) [0] (Duration 1)
-             in seqSteps (setStep 99 99 st) @?= seqSteps st
+             in (setStep 99 99 st).steps @?= st.steps
         ]
 
 pressPadSmokeTests :: TestTree
@@ -189,16 +189,16 @@ pressPadSmokeTests =
             engine <- newEngine
             setMode engine (InstrumentMode defaultInstrumentConfig)
             pressPad 2 0 engine (Velocity 0.8)
-            sched <- readTVarIO (engineSchedVar engine)
-            let pending = map schedAction (schedPending sched)
+            sched <- readTVarIO engine.schedVar
+            let pending = map (.action) sched.pending
             assertBool "expected a SchedNoteOn for column 2 of default instrument" $
                 SchedNoteOn (Pitch 38) (Velocity 0.8) `elem` pending
         , testCase "InstrumentMode release enqueues SchedNoteOff" $ do
             engine <- newEngine
             setMode engine (InstrumentMode defaultInstrumentConfig)
             releasePad 0 1 engine
-            sched <- readTVarIO (engineSchedVar engine)
-            let pending = map schedAction (schedPending sched)
+            sched <- readTVarIO engine.schedVar
+            let pending = map (.action) sched.pending
             assertBool "expected a SchedNoteOff for (0,1) of default instrument" $
                 SchedNoteOff (Pitch 41) `elem` pending
         ]

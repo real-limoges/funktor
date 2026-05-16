@@ -15,10 +15,10 @@ tests =
         "Audio.State"
         [ testCase "createSineAudioState initializes correctly" $ do
             let st = createSineAudioState 440 1.0
-            assertBool "pool length" (V.length (poolVoices $ audioPool st) == maxVoices)
-            assertBool "all slots empty" (all isNothing (V.toList $ poolVoices $ audioPool st))
-            assertBool "default envelope" (audioEnvelope st == defaultEnvelope)
-            assertBool "time zero" (audioTime st == 0)
+            assertBool "pool length" (V.length st.pool.voices == maxVoices)
+            assertBool "all slots empty" (all isNothing (V.toList st.pool.voices))
+            assertBool "default envelope" (st.envelope == defaultEnvelope)
+            assertBool "time zero" (st.time == 0)
         , testCase "constants" $ do
             assertBool "sampleRate" (sampleRate == 44100)
             assertBool "bufferSize" (bufferSize == 512)

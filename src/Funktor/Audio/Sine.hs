@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Funktor.Audio.Sine (sineCallback)
 where
 
@@ -17,11 +15,10 @@ import SDL qualified
 sineCallback :: TVar AudioState -> SDL.AudioFormat t -> VM.IOVector t -> IO ()
 sineCallback stateVar SDL.FloatingLEAudio buf = do
     st <- readTVarIO stateVar
-    let pool = audioPool st
+    let p = st.pool
         len = VM.length buf
         rate = sampleRate
-        baseT = audioTime st
-    -- Fill buffer by summing all active voices per sample
+        baseT = st.time
     forM_ [0 .. len - 1] $ \i -> do
         let t = baseT + fromIntegral i / rate
             total =
@@ -30,25 +27,23 @@ sineCallback stateVar SDL.FloatingLEAudio buf = do
                         case maybeV of
                             Nothing -> acc
                             Just v ->
-                                let env = envelopeAmplitude (audioEnvelope st) (voiceNoteOnAt v) (voiceNoteOffAt v) t
-                                    amp = velocityToAmplitude (voiceVelocity v)
-                                    ph = voicePhase v
-                                    sample = amp * env * sin (2 * pi * ph)
+                                let env = envelopeAmplitude st.envelope v.noteOnAt v.noteOffAt t
+                                    amp = velocityToAmplitude v.velocity
+                                    sample = amp * env * sin (2 * pi * v.phase)
                                  in acc + sample
                     )
                     (0.0 :: Double)
-                    (poolVoices pool)
+                    p.voices
             out = realToFrac (total / fromIntegral maxVoices) :: Float
         VM.write buf i out
-    -- Advance phases for all voices
-    let advance v = v{voicePhase = (voicePhase v + (voiceFreq v / rate) * fromIntegral len) `mod'` 1.0}
-        newVoices = V.map (fmap advance) (poolVoices pool)
+    let advance :: Voice -> Voice
+        advance v = v{phase = (v.phase + (v.freq / rate) * fromIntegral len) `mod'` 1.0}
+        newVoices = V.map (fmap advance) p.voices
     atomically $ modifyTVar' stateVar $ \s ->
         s
-            { audioPool = (audioPool s){poolVoices = newVoices}
-            , audioTime = audioTime s + fromIntegral len / rate
+            { pool = s.pool{voices = newVoices}
+            , time = s.time + fromIntegral len / rate
             }
-    -- Cleanup finished voices each buffer
     atomically $ modifyTVar' stateVar $ \s ->
-        s{audioPool = cleanupVoices (audioEnvelope s) (audioTime s) (audioPool s)}
+        s{pool = cleanupVoices s.envelope s.time s.pool}
 sineCallback _ _ _ = pure ()

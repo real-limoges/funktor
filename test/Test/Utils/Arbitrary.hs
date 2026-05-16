@@ -46,10 +46,10 @@ instance Arbitrary EnvelopeParams where
         Positive r <- arbitrary :: Gen (Positive Double)
         pure
             EnvelopeParams
-                { envAttack = a
-                , envDecay = d
-                , envSustain = s
-                , envRelease = r
+                { attack = a
+                , decay = d
+                , sustain = s
+                , release = r
                 }
 
 instance Arbitrary Waveform where

@@ -25,62 +25,68 @@ data SchedulerAction
     deriving (Eq, Show)
 
 data ScheduledEvent = ScheduledEvent
-    { schedTime :: !Double
-    , schedAction :: !SchedulerAction
+    { time :: !Double
+    , action :: !SchedulerAction
     }
     deriving (Show)
 
 data SchedulerState = SchedulerState
-    { schedTempo :: !Tempo
-    , schedStream :: !(Stream Note)
-    , schedBeat :: !Beat
-    , schedStartTime :: !Double
-    , schedPending :: ![ScheduledEvent]
-    , schedLookAhead :: !Double
+    { tempo :: !Tempo
+    , stream :: !(Stream Note)
+    , beat :: !Beat
+    , startTime :: !Double
+    , pending :: ![ScheduledEvent]
+    , lookAhead :: !Double
     }
 
+{- | 100ms lookahead absorbs jitter in the scheduler tick (which is best-effort
+on a non-realtime OS) without adding latency a human player would feel
+between a 'play' / 'hot-swap' call and the resulting audio.
+-}
 initialSchedulerState :: Stream Note -> Tempo -> Double -> SchedulerState
-initialSchedulerState stream tempo startTime =
+initialSchedulerState s t start =
     SchedulerState
-        { schedTempo = tempo
-        , schedStream = stream
-        , schedBeat = Beat 0
-        , schedStartTime = startTime
-        , schedPending = []
-        , schedLookAhead = 0.1
+        { tempo = t
+        , stream = s
+        , beat = Beat 0
+        , startTime = start
+        , pending = []
+        , lookAhead = 0.1
         }
 
 schedulerThread :: TVar AudioState -> TVar SchedulerState -> IO ()
 schedulerThread audioVar schedVar = forever $ do
     now <- getMonotonicTime
-    startTime <- schedStartTime <$> readTVarIO schedVar
-    let currentTime = now - startTime
+    start <- (.startTime) <$> readTVarIO schedVar
+    let currentTime = now - start
     atomically $ do
         st <- readTVar schedVar
-        let (due, remaining) = L.partition (\e -> schedTime e <= currentTime) (schedPending st)
-            nextBeat = schedBeat st + Beat (secondsToBeats (schedTempo st) (schedLookAhead st))
-            newEvents = eventsFromStream st (schedBeat st) nextBeat
-            merged = L.sortOn schedTime (remaining ++ newEvents)
-        writeTVar schedVar st{schedBeat = nextBeat, schedPending = merged}
+        let (due, remaining) = L.partition (\e -> e.time <= currentTime) st.pending
+            nextBeat = st.beat + Beat (secondsToBeats st.tempo st.lookAhead)
+            newEvents = eventsFromStream st st.beat nextBeat
+            merged = L.sortOn (.time) (remaining ++ newEvents)
+        writeTVar schedVar st{beat = nextBeat, pending = merged}
         mapM_ (applyAction audioVar currentTime) due
+    -- 10ms tick: fine enough that quantisation isn't audible at sensible
+    -- tempos, coarse enough to leave the CPU alone between batches.
     threadDelay 10000
 
 applyAction :: TVar AudioState -> Double -> ScheduledEvent -> STM ()
-applyAction audioVar currentTime event = case schedAction event of
-    SchedNoteOn pitch vel -> modifyAudioPool $ poolNoteOn currentTime pitch vel
-    SchedNoteOff pitch -> modifyAudioPool $ poolNoteOff currentTime pitch
+applyAction audioVar currentTime event = case event.action of
+    SchedNoteOn p vel -> modifyAudioPool $ poolNoteOn currentTime p vel
+    SchedNoteOff p -> modifyAudioPool $ poolNoteOff currentTime p
   where
-    modifyAudioPool f = modifyTVar' audioVar (\s -> s{audioPool = f (audioPool s)})
+    modifyAudioPool f = modifyTVar' audioVar (\s -> s{pool = f s.pool})
 
 eventsFromStream :: SchedulerState -> Beat -> Beat -> [ScheduledEvent]
 eventsFromStream st fromBeat toBeat =
-    concatMap (eventToActions (schedTempo st) (schedStartTime st)) $
-        runStream (schedStream st) fromBeat toBeat
+    concatMap (eventToActions st.tempo st.startTime) $
+        runStream st.stream fromBeat toBeat
 
 eventToActions :: Tempo -> Double -> Event Note -> [ScheduledEvent]
-eventToActions tempo startTime (Event beat (Note pitch duration velocity)) =
-    [ ScheduledEvent (startTime + beatToSeconds tempo (unBeat beat)) (SchedNoteOn pitch velocity)
-    , ScheduledEvent (startTime + beatToSeconds tempo (unBeat beat + unDuration duration)) (SchedNoteOff pitch)
+eventToActions t start (Event b (Note p d v)) =
+    [ ScheduledEvent (start + beatToSeconds t (unBeat b)) (SchedNoteOn p v)
+    , ScheduledEvent (start + beatToSeconds t (unBeat b + unDuration d)) (SchedNoteOff p)
     ]
 
 beatToSeconds :: Tempo -> Rational -> Double
@@ -98,7 +104,7 @@ as already due, regardless of clock drift.
 enqueueImmediate :: TVar SchedulerState -> SchedulerAction -> STM ()
 enqueueImmediate var act =
     modifyTVar' var $ \s ->
-        s{schedPending = ScheduledEvent (-1 / 0) act : schedPending s}
+        s{pending = ScheduledEvent (-1 / 0) act : s.pending}
 
 {- | Atomically replace the scheduler's stream, restart the beat clock at 0,
 and drop any events queued from the previous stream. Used by 'Funktor.Live'
@@ -106,6 +112,6 @@ for the GHCi @play@ hot-swap, by 'Funktor.Grid.Binding' to commit Sequencer
 toggle changes, and by Scene-mode pad presses to swap whole patterns.
 -}
 hotSwap :: TVar SchedulerState -> Stream Note -> STM ()
-hotSwap var stream =
-    modifyTVar' var $ \s ->
-        s{schedStream = stream, schedBeat = Beat 0, schedPending = []}
+hotSwap var s =
+    modifyTVar' var $ \st ->
+        st{stream = s, beat = Beat 0, pending = []}

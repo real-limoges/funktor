@@ -20,15 +20,15 @@ tests =
             ampAt params 1.0 Nothing 0.5 == 0
         , testProperty "sustain plateau (no release)" $ \(params :: EnvelopeParams) ->
             let onT = 0.0
-                decayEnd = onT + envAttack params + envDecay params
+                decayEnd = onT + params.attack + params.decay
                 t = decayEnd + 1.0
-             in ampAt params onT Nothing t == envSustain params
+             in ampAt params onT Nothing t == params.sustain
         , testProperty "zero after release window" $ \(params :: EnvelopeParams) ->
             let onT = 0.0
-                offT = onT + envAttack params + envDecay params + 0.1
+                offT = onT + params.attack + params.decay + 0.1
                 relEnd =
-                    max offT (onT + envAttack params + envDecay params)
-                        + envRelease params
+                    max offT (onT + params.attack + params.decay)
+                        + params.release
                         + 0.5
              in ampAt params onT (Just offT) relEnd == 0
         , testCase "never negative for default envelope" $ do
@@ -39,19 +39,19 @@ tests =
                 (all (>= 0) [ampAt params 0 Nothing t | t <- times])
         , testCase "amplitude reaches 1 at end of attack" $
             let p = defaultEnvelope
-                amp = ampAt p 0 Nothing (envAttack p)
+                amp = ampAt p 0 Nothing p.attack
              in assertBool ("got " ++ show amp) (abs (amp - 1.0) < 1e-9)
         , testProperty "monotonic non-decreasing during attack" $ \(params :: EnvelopeParams) ->
             let onT = 0.0
-                a = envAttack params
+                a = params.attack
                 ts = [0, a / 20 .. a]
                 amps = [ampAt params onT Nothing t | t <- ts]
              in and (zipWith (<=) amps (drop 1 amps))
         , testProperty "monotonic non-increasing during release" $ \(params :: EnvelopeParams) ->
             let onT = 0.0
-                offT = onT + envAttack params + envDecay params + 0.1
-                relStart = max offT (onT + envAttack params + envDecay params)
-                r = envRelease params
+                offT = onT + params.attack + params.decay + 0.1
+                relStart = max offT (onT + params.attack + params.decay)
+                r = params.release
                 ts = [relStart, relStart + r / 20 .. relStart + r]
                 amps = [ampAt params onT (Just offT) t | t <- ts]
              in and (zipWith (>=) amps (drop 1 amps))

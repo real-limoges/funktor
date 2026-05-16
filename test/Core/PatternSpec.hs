@@ -17,7 +17,7 @@ tests =
     testGroup
         "Core.Pattern"
         [ testProperty "duration of append" $ \(p :: Pattern Int) (q :: Pattern Int) ->
-            duration (append p q) == duration p + duration q
+            (append p q).duration == p.duration + q.duration
         , testProperty "shift inverse" $ \(d :: Beat) (p :: Pattern Int) ->
             shift d (shift (-d) p) == p
         , testCase "empty is empty" $
@@ -25,23 +25,23 @@ tests =
         , testProperty "singleton not empty" $ \(dur :: Duration) (x :: Int) ->
             not (isEmpty (singleton dur x))
         , testProperty "pattern_ sorts events" $ \(dur :: Duration) (evs :: [Event Int]) ->
-            let beats = map eventBeat (patternEvents (pattern_ dur evs))
+            let beats = map (.beat) (pattern_ dur evs).events
              in and (zipWith (<=) beats (drop 1 beats))
         , testProperty "repeat_ 1 is identity" $ \(p :: Pattern Int) ->
             repeat_ 1 p == p
         , testCase "repeat_ 0 yields empty" $
             repeat_ 0 (singleton 1 (1 :: Int)) @?= empty
         , testProperty "stack duration is max" $ \(p :: Pattern Int) (q :: Pattern Int) ->
-            duration (stack p q) == max (duration p) (duration q)
+            (stack p q).duration == max p.duration q.duration
         , testProperty "stack event set is union" $ \(p :: Pattern Int) (q :: Pattern Int) ->
-            sort (patternEvents (stack p q)) == sort (patternEvents p ++ patternEvents q)
+            sort (stack p q).events == sort (p.events ++ q.events)
         , testProperty "scale 1 is identity" $ \(p :: Pattern Int) ->
             scale 1 p == p
         , testProperty "repeat_ duration scales" $ \(NonNegative n) (p :: Pattern Int) ->
-            duration (repeat_ n p) == fromIntegral n * duration p
+            (repeat_ n p).duration == fromIntegral n * p.duration
         , testCase "pentatonic 4 pitches" $
-            let evs = patternEvents (pentatonic 4)
-                pitches = [unPitch (notePitch (eventValue e)) | e <- evs]
+            let evs = (pentatonic 4).events
+                pitches = [unPitch e.value.pitch | e <- evs]
              in pitches @?= [60, 63, 65, 67, 70]
         , testProperty "mapEvents identity preserves events" $ \(p :: Pattern Int) ->
             mapEvents id p == p

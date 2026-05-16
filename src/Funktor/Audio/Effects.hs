@@ -1,3 +1,10 @@
+{- | Audio effects.
+
+Only the one-pole low-pass is wired into 'applyEffects' today. 'applyDelay',
+'newReverbState', and the surrounding plumbing are kept exported and covered
+by tests so the audio polish work in Tier 6 can pick them up directly. The
+hardcoded sample rate and cutoff are placeholders pending that pass.
+-}
 module Funktor.Audio.Effects (
     LowPassState (..),
     DelayState (..),
@@ -15,36 +22,42 @@ module Funktor.Audio.Effects (
 import Control.Monad (foldM)
 import Data.Vector.Storable.Mutable qualified as VM
 
+defaultCutoffHz :: Double
+defaultCutoffHz = 2000
+
+defaultSampleRate :: Double
+defaultSampleRate = 44100
+
 newtype LowPassState = LowPassState
-    { lpPrevOutput :: Double
+    { prevOutput :: Double
     }
     deriving (Show)
 
 data DelayState = DelayState
-    { delayBuffer :: !(VM.IOVector Double)
-    , delayWritePos :: !Int
+    { buffer :: !(VM.IOVector Double)
+    , writePos :: !Int
     }
 
 data ReverbState = ReverbState
-    { reverbCombs :: ![DelayState]
-    , reverbAllpasses :: ![DelayState]
+    { combs :: ![DelayState]
+    , allpasses :: ![DelayState]
     }
 
 data EffectsState = EffectsState
-    { fxLowPass :: !LowPassState
-    , fxDelay :: !DelayState
-    , fxReverb :: !ReverbState
+    { lowPass :: !LowPassState
+    , delay :: !DelayState
+    , reverb :: !ReverbState
     }
 
 lowPassCoeff :: Double -> Double
-lowPassCoeff cutoff = 1.0 - exp (-(2.0 * pi * cutoff / 44100.0))
+lowPassCoeff cutoff = 1.0 - exp (-(2.0 * pi * cutoff / defaultSampleRate))
 
 applyLowPass :: Double -> LowPassState -> (Double, LowPassState)
-applyLowPass input state =
-    let output = lpPrevOutput state + coeff * (input - lpPrevOutput state)
+applyLowPass input st =
+    let output = st.prevOutput + coeff * (input - st.prevOutput)
      in (output, LowPassState output)
   where
-    coeff = lowPassCoeff 2000
+    coeff = lowPassCoeff defaultCutoffHz
 
 processLowPass :: LowPassState -> VM.IOVector Float -> IO LowPassState
 processLowPass st buf = foldM step st [0 .. VM.length buf - 1]
@@ -57,24 +70,24 @@ processLowPass st buf = foldM step st [0 .. VM.length buf - 1]
 
 newDelayState :: Int -> IO DelayState
 newDelayState size = do
-    buffer <- VM.new size
-    VM.set buffer 0
-    return
+    buf <- VM.new size
+    VM.set buf 0
+    pure
         DelayState
-            { delayBuffer = buffer
-            , delayWritePos = 0
+            { buffer = buf
+            , writePos = 0
             }
 
 applyDelay :: Double -> Double -> DelayState -> Double -> IO (Double, DelayState)
 applyDelay feedback mix st input = do
-    let bufLen = VM.length (delayBuffer st)
-        writePos = delayWritePos st
-        readPos = (writePos - bufLen + 1) `mod` bufLen
-    delayed <- VM.read (delayBuffer st) readPos
+    let bufLen = VM.length st.buffer
+        wp = st.writePos
+        readPos = (wp - bufLen + 1) `mod` bufLen
+    delayed <- VM.read st.buffer readPos
     let output = (1.0 - mix) * input + mix * delayed
         writeVal = input + feedback * delayed
-    VM.write (delayBuffer st) writePos writeVal
-    pure (output, st{delayWritePos = (writePos + 1) `mod` bufLen})
+    VM.write st.buffer wp writeVal
+    pure (output, st{writePos = (wp + 1) `mod` bufLen})
 
 newReverbState :: IO ReverbState
 newReverbState = do
@@ -84,13 +97,13 @@ newReverbState = do
     comb4 <- newDelayState 1422
     allpass1 <- newDelayState 225
     allpass2 <- newDelayState 556
-    return
+    pure
         ReverbState
-            { reverbCombs = [comb1, comb2, comb3, comb4]
-            , reverbAllpasses = [allpass1, allpass2]
+            { combs = [comb1, comb2, comb3, comb4]
+            , allpasses = [allpass1, allpass2]
             }
 
 applyEffects :: EffectsState -> VM.IOVector Float -> IO EffectsState
 applyEffects effects buf = do
-    fx1 <- processLowPass (fxLowPass effects) buf
-    pure effects{fxLowPass = fx1}
+    fx1 <- processLowPass effects.lowPass buf
+    pure effects{lowPass = fx1}

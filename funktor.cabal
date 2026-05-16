@@ -52,6 +52,7 @@ library
                       Funktor.UI
 
     other-extensions: RecordWildCards, CPP
+    default-extensions: OverloadedRecordDot, DuplicateRecordFields
     build-depends:    base >= 4.21 && < 4.23
                     , async >= 2.2 && < 2.3
                     , containers >= 0.6
@@ -74,6 +75,7 @@ executable funktor
     import:           warnings
     main-is:          Main.hs
     other-extensions: RecordWildCards
+    default-extensions: OverloadedRecordDot, DuplicateRecordFields
 
     build-depends:
         base >= 4.21 && < 4.23,
@@ -86,6 +88,7 @@ test-suite funktor-test
     import:           warnings
     default-language: GHC2024
     other-extensions: RecordWildCards, ScopedTypeVariables, CPP
+    default-extensions: OverloadedRecordDot, DuplicateRecordFields
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs

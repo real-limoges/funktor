@@ -66,8 +66,7 @@ import Control.Concurrent.STM (TQueue, newTQueueIO, readTQueue)
 import Control.Monad (forever, when)
 import Data.Maybe (isJust)
 import Funktor.Grid.Binding (
-    AudioEngine,
-    engineMode,
+    AudioEngine (..),
     newAudioEngine,
     pressPad,
     releasePad,
@@ -108,13 +107,9 @@ import Funktor.Hardware.MIDI (
  )
 #endif
 
--- ---------------------------------------------------------------------------
--- Handle synonyms
---
--- 'LiveState' always carries every concurrency slot so its shape is
--- independent of the build flag. With MIDI off the inner types collapse to
--- '()' and the slots are permanently 'Nothing'.
--- ---------------------------------------------------------------------------
+-- 'LiveState' carries every concurrency slot whether or not the @midi@
+-- flag is on. Without MIDI the inner types collapse to '()' and the slots
+-- are permanently 'Nothing'.
 
 #ifdef MIDI_ENABLED
 type MidiInputHandle = MidiInputThread
@@ -151,23 +146,22 @@ do not reuse it for other 'persistAt' calls.
 globalLive :: TVar (Maybe LiveState)
 globalLive = unsafePerformIO (persistAt 0 (newTVarIO Nothing))
 
--- | Live session state
 data LiveState = LiveState
-    { liveStream :: Stream Note
-    , liveTempo :: !Tempo
-    , liveSchedVar :: !(TVar SchedulerState)
-    , liveAudioVar :: !(TVar AudioState)
-    , liveThreadId :: !(Maybe ThreadId)
-    , liveDevice :: SDL.AudioDevice
-    , liveMidi :: !(Maybe MidiInputHandle)
-    , liveMidiRouter :: !(Maybe MidiRouterHandle)
-    , liveMidiQueue :: !(Maybe MidiQueueHandle)
-    , liveLaunchpadIn :: !(Maybe LaunchpadInHandle)
-    , liveLaunchpadOut :: !(Maybe LaunchpadOutHandle)
-    , liveLaunchpadRouter :: !(Maybe LaunchpadRouterHandle)
-    , liveLaunchpadQueue :: !(Maybe LaunchpadQueueHandle)
-    , liveEngine :: !(Maybe LaunchpadEngineHandle)
-    , liveWatcher :: !(Maybe (Async ()))
+    { stream :: Stream Note
+    , tempo :: !Tempo
+    , schedVar :: !(TVar SchedulerState)
+    , audioVar :: !(TVar AudioState)
+    , threadId :: !(Maybe ThreadId)
+    , device :: SDL.AudioDevice
+    , midi :: !(Maybe MidiInputHandle)
+    , midiRouter :: !(Maybe MidiRouterHandle)
+    , midiQueue :: !(Maybe MidiQueueHandle)
+    , launchpadIn :: !(Maybe LaunchpadInHandle)
+    , launchpadOut :: !(Maybe LaunchpadOutHandle)
+    , launchpadRouter :: !(Maybe LaunchpadRouterHandle)
+    , launchpadQueue :: !(Maybe LaunchpadQueueHandle)
+    , engine :: !(Maybe LaunchpadEngineHandle)
+    , watcher :: !(Maybe (Async ()))
     }
 
 {- | Play a stream of notes in the live session. Starts a new session if
@@ -200,36 +194,36 @@ bootSession stream = do
         writeTVar globalLive $
             Just
                 LiveState
-                    { liveStream = stream
-                    , liveTempo = Tempo 120
-                    , liveSchedVar = schedVar
-                    , liveAudioVar = audioVar
-                    , liveThreadId = Just tid
-                    , liveDevice = dev
-                    , liveMidi = Nothing
-                    , liveMidiRouter = Nothing
-                    , liveMidiQueue = Nothing
-                    , liveLaunchpadIn = Nothing
-                    , liveLaunchpadOut = Nothing
-                    , liveLaunchpadRouter = Nothing
-                    , liveLaunchpadQueue = Nothing
-                    , liveEngine = Nothing
-                    , liveWatcher = Just watcher
+                    { stream = stream
+                    , tempo = Tempo 120
+                    , schedVar = schedVar
+                    , audioVar = audioVar
+                    , threadId = Just tid
+                    , device = dev
+                    , midi = Nothing
+                    , midiRouter = Nothing
+                    , midiQueue = Nothing
+                    , launchpadIn = Nothing
+                    , launchpadOut = Nothing
+                    , launchpadRouter = Nothing
+                    , launchpadQueue = Nothing
+                    , engine = Nothing
+                    , watcher = Just watcher
                     }
 
 ensureWatcher :: IO ()
 ensureWatcher = do
     mst <- readTVarIO globalLive
     case mst of
-        Just st | Nothing <- liveWatcher st -> do
+        Just st | Nothing <- st.watcher -> do
             w <- startWatcher "."
-            atomically $ modifyTVar' globalLive $ fmap $ \s -> s{liveWatcher = Just w}
+            atomically $ modifyTVar' globalLive $ fmap $ \s -> s{watcher = Just w}
         _ -> pure ()
 
 hotSwap :: LiveState -> Stream Note -> IO ()
 hotSwap st stream = atomically $ do
-    Scheduler.hotSwap (liveSchedVar st) stream
-    modifyTVar' globalLive $ fmap $ \s -> s{liveStream = stream}
+    Scheduler.hotSwap (st.schedVar) stream
+    modifyTVar' globalLive $ fmap $ \s -> s{stream = stream}
 
 {- | Stop the live session and clean up all resources. Teardown order
 preserves the invariants of each subsystem: the watcher dies first (so its
@@ -246,47 +240,45 @@ stop = do
     case mst of
         Nothing -> putStrLn "Nothing playing."
         Just st -> do
-            mapM_ killThread (liveThreadId st)
-            atomically $ modifyTVar' (liveAudioVar st) silenceAllVoices
+            mapM_ killThread (st.threadId)
+            atomically $ modifyTVar' (st.audioVar) silenceAllVoices
             atomically $ writeTVar globalLive Nothing
-            closeDevice (liveDevice st)
+            closeDevice (st.device)
 
 stopWatcherIfRunning :: IO ()
 stopWatcherIfRunning = do
     mst <- readTVarIO globalLive
     case mst of
-        Just st | Just w <- liveWatcher st -> do
+        Just st | Just w <- st.watcher -> do
             stopWatcher w
-            atomically $ modifyTVar' globalLive $ fmap $ \s -> s{liveWatcher = Nothing}
+            atomically $ modifyTVar' globalLive $ fmap $ \s -> s{watcher = Nothing}
         _ -> pure ()
 
 -- | Set the tempo of the currently playing session
 setTempo :: Tempo -> IO ()
-setTempo tempo = do
+setTempo t = do
     mst <- readTVarIO globalLive
     case mst of
         Nothing -> putStrLn "Nothing playing. Call play first."
         Just st -> do
-            atomically $ modifyTVar' (liveSchedVar st) $ \s ->
-                s{schedTempo = tempo}
-            atomically $ modifyTVar' globalLive $ fmap $ \s ->
-                s{liveTempo = tempo}
-            putStrLn $ "Tempo: " ++ show (unTempo tempo) ++ " BPM"
+            atomically $ modifyTVar' st.schedVar (setSchedTempo t)
+            atomically $ modifyTVar' globalLive (fmap (setLiveTempo t))
+            putStrLn $ "Tempo: " ++ show (unTempo t) ++ " BPM"
+
+setSchedTempo :: Tempo -> SchedulerState -> SchedulerState
+setSchedTempo t s = s{tempo = t}
+
+setLiveTempo :: Tempo -> LiveState -> LiveState
+setLiveTempo t s = s{tempo = t}
 
 -- | Silence all voices (helper for stop)
 silenceAllVoices :: AudioState -> AudioState
-silenceAllVoices st = st{audioPool = emptyPool}
-
--- ---------------------------------------------------------------------------
--- MIDI integration
--- ---------------------------------------------------------------------------
+silenceAllVoices st = st{pool = emptyPool}
 
 #ifdef MIDI_ENABLED
 
-{- | Open the first available MIDI input device and start forwarding incoming
-note-on/off events to the audio pipeline. Requires an active session ('play'
-must have been called). Idempotent: calling twice is a no-op with a
-friendly message.
+{- | Open the first available MIDI input device and forward note-on/off
+events into the audio pipeline. Requires an active session. Idempotent.
 -}
 startMidi :: IO ()
 startMidi = startMidiWith defaultMidiConfig
@@ -300,7 +292,7 @@ startMidiWith cfg = do
     case mst of
         Nothing -> putStrLn "Nothing playing. Call play first."
         Just st
-            | isJust (liveMidi st) -> putStrLn "MIDI input already running."
+            | isJust (st.midi) -> putStrLn "MIDI input already running."
             | otherwise -> do
                 eh <- openInput cfg
                 case eh of
@@ -309,12 +301,12 @@ startMidiWith cfg = do
                         let name = midiHandleName h
                         q <- newTQueueIO
                         inThread <- startInputThread h q
-                        routerAsync <- startMidiRouter q (liveSchedVar st)
+                        routerAsync <- startMidiRouter q (st.schedVar)
                         atomically $ modifyTVar' globalLive $ fmap $ \s ->
                             s
-                                { liveMidi = Just inThread
-                                , liveMidiRouter = Just routerAsync
-                                , liveMidiQueue = Just q
+                                { midi = Just inThread
+                                , midiRouter = Just routerAsync
+                                , midiQueue = Just q
                                 }
                         putStrLn ("MIDI input: " ++ name)
 
@@ -328,14 +320,14 @@ stopMidi = do
     case mst of
         Nothing -> pure ()
         Just st -> do
-            let wasRunning = isJust (liveMidi st)
-            mapM_ stopInputThread (liveMidi st)
-            mapM_ Async.cancel (liveMidiRouter st)
+            let wasRunning = isJust (st.midi)
+            mapM_ stopInputThread (st.midi)
+            mapM_ Async.cancel (st.midiRouter)
             atomically $ modifyTVar' globalLive $ fmap $ \s ->
                 s
-                    { liveMidi = Nothing
-                    , liveMidiRouter = Nothing
-                    , liveMidiQueue = Nothing
+                    { midi = Nothing
+                    , midiRouter = Nothing
+                    , midiQueue = Nothing
                     }
             when wasRunning $ putStrLn "MIDI input stopped."
 
@@ -353,20 +345,16 @@ listMidiInputs = do
     printDev d =
         putStrLn $
             "  ["
-                ++ show (midiDevId d)
+                ++ show d.devId
                 ++ "] "
-                ++ midiDevName d
+                ++ d.name
                 ++ " ("
-                ++ midiDevInterface d
+                ++ d.interface
                 ++ ")"
-
--- ---------------------------------------------------------------------------
--- Launchpad integration
--- ---------------------------------------------------------------------------
 
 defaultLaunchpadConfig :: MidiConfig
 defaultLaunchpadConfig =
-    defaultMidiConfig{midiCfgDeviceSelector = ByNameSubstring "Launchpad"}
+    defaultMidiConfig{deviceSelector = ByNameSubstring "Launchpad"}
 
 {- | Open the first Launchpad device, switch it into Programmer Mode, and
 spawn an input + router pair that drives 'Funktor.Grid.Binding'. Requires
@@ -386,7 +374,7 @@ startLaunchpadWith lpCfg inCfg outCfg = do
     case mst of
         Nothing -> putStrLn "Nothing playing. Call play first."
         Just st
-            | isJust (liveLaunchpadIn st) -> putStrLn "Launchpad already running."
+            | isJust (st.launchpadIn) -> putStrLn "Launchpad already running."
             | otherwise -> do
                 ein <- openInput inCfg
                 case ein of
@@ -399,19 +387,19 @@ startLaunchpadWith lpCfg inCfg outCfg = do
                                 putStrLn ("Launchpad out: " ++ err ++ " — plug in before starting GHCi.")
                             Right outH -> do
                                 sendSysEx outH (programmerModeSysEx lpCfg)
-                                engine <- newAudioEngine (liveAudioVar st) (liveSchedVar st)
-                                initialMode <- readTVarIO (engineMode engine)
+                                engine <- newAudioEngine (st.audioVar) (st.schedVar)
+                                initialMode <- readTVarIO engine.mode
                                 sendSysEx outH (gridLedSysEx lpCfg (gridForMode initialMode))
                                 q <- newTQueueIO
                                 inThread <- startInputThread inH q
                                 routerAsync <- startLaunchpadRouter lpCfg q engine outH
                                 atomically $ modifyTVar' globalLive $ fmap $ \s ->
                                     s
-                                        { liveLaunchpadIn = Just inThread
-                                        , liveLaunchpadOut = Just outH
-                                        , liveLaunchpadRouter = Just routerAsync
-                                        , liveLaunchpadQueue = Just q
-                                        , liveEngine = Just engine
+                                        { launchpadIn = Just inThread
+                                        , launchpadOut = Just outH
+                                        , launchpadRouter = Just routerAsync
+                                        , launchpadQueue = Just q
+                                        , engine = Just engine
                                         }
                                 putStrLn ("Launchpad: " ++ midiHandleName inH)
 
@@ -423,17 +411,17 @@ stopLaunchpad = do
     case mst of
         Nothing -> pure ()
         Just st -> do
-            let wasRunning = isJust (liveLaunchpadIn st)
-            mapM_ Async.cancel (liveLaunchpadRouter st)
-            mapM_ stopInputThread (liveLaunchpadIn st)
-            mapM_ resetAndClose (liveLaunchpadOut st)
+            let wasRunning = isJust (st.launchpadIn)
+            mapM_ Async.cancel (st.launchpadRouter)
+            mapM_ stopInputThread (st.launchpadIn)
+            mapM_ resetAndClose (st.launchpadOut)
             atomically $ modifyTVar' globalLive $ fmap $ \s ->
                 s
-                    { liveLaunchpadIn = Nothing
-                    , liveLaunchpadOut = Nothing
-                    , liveLaunchpadRouter = Nothing
-                    , liveLaunchpadQueue = Nothing
-                    , liveEngine = Nothing
+                    { launchpadIn = Nothing
+                    , launchpadOut = Nothing
+                    , launchpadRouter = Nothing
+                    , launchpadQueue = Nothing
+                    , engine = Nothing
                     }
             when wasRunning $ putStrLn "Launchpad stopped."
   where
@@ -447,8 +435,8 @@ setGridMode mode = do
     mst <- readTVarIO globalLive
     case mst of
         Just st
-            | Just engine <- liveEngine st
-            , Just outH <- liveLaunchpadOut st -> do
+            | Just engine <- st.engine
+            , Just outH <- st.launchpadOut -> do
                 setMode engine mode
                 sendSysEx outH (gridLedSysEx defaultMk3Config (gridForMode mode))
         _ -> putStrLn "Launchpad not running. Call startLaunchpad first."
@@ -465,11 +453,11 @@ listLaunchpadDevices = do
     printDev d =
         putStrLn $
             "  ["
-                ++ show (midiDevId d)
+                ++ show d.devId
                 ++ "] "
-                ++ midiDevName d
+                ++ d.name
                 ++ " ("
-                ++ midiDevInterface d
+                ++ d.interface
                 ++ ")"
 
 {- | Drain the Launchpad input queue and dispatch pad events. Top-row

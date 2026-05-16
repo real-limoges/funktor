@@ -39,13 +39,15 @@ data LaunchpadEvent
     | PadAftertouch !(Int, Int) !Int
     deriving (Eq, Show)
 
--- | Configuration for a specific Launchpad model.
+{- | Configuration for a specific Launchpad model. Only the SysEx vendor
+header and addressable grid dimensions are configurable; the note ↔ grid
+mapping is fixed by the Mk3 layout and lives in the top-level 'noteToGrid'
+/ 'gridToNote' helpers.
+-}
 data LaunchpadConfig = LaunchpadConfig
-    { lpSysExHeader :: ![Word8]
-    , lpNoteToGrid :: !(Int -> Maybe (Int, Int))
-    , lpGridToNote :: !(Int -> Int -> Int)
-    , lpGridWidth :: !Int
-    , lpGridHeight :: !Int
+    { sysExHeader :: ![Word8]
+    , width :: !Int
+    , height :: !Int
     }
 
 {- | Configuration for the Launchpad Mini Mk3 in Programmer Mode. Covers the
@@ -55,11 +57,9 @@ top-right slot (note 99) is the Novation logo, not a button.
 defaultMk3Config :: LaunchpadConfig
 defaultMk3Config =
     LaunchpadConfig
-        { lpSysExHeader = [0x00, 0x20, 0x29, 0x02, 0x0D]
-        , lpNoteToGrid = noteToGrid
-        , lpGridToNote = gridToNote
-        , lpGridWidth = 9
-        , lpGridHeight = 9
+        { sysExHeader = [0x00, 0x20, 0x29, 0x02, 0x0D]
+        , width = 9
+        , height = 9
         }
 
 {- | Decode a Programmer-Mode MIDI note into a grid coordinate. Returns
@@ -102,21 +102,21 @@ colorToRGB c = case c of
 with velocity 0 is canonicalised to 'PadUp' by the upstream parser.
 -}
 midiToLaunchpadEvent :: LaunchpadConfig -> MidiMessage -> Maybe LaunchpadEvent
-midiToLaunchpadEvent cfg msg = case msg of
-    NoteOn _ (Pitch p) v -> fmap (`PadDown` v) (lpNoteToGrid cfg p)
-    NoteOff _ (Pitch p) _ -> fmap PadUp (lpNoteToGrid cfg p)
-    PolyAftertouch _ (Pitch p) pr -> fmap (`PadAftertouch` pr) (lpNoteToGrid cfg p)
+midiToLaunchpadEvent _ msg = case msg of
+    NoteOn _ (Pitch p) v -> fmap (`PadDown` v) (noteToGrid p)
+    NoteOff _ (Pitch p) _ -> fmap PadUp (noteToGrid p)
+    PolyAftertouch _ (Pitch p) pr -> fmap (`PadAftertouch` pr) (noteToGrid p)
     _ -> Nothing
 
 {- | SysEx payload (no F0/F7 framing) that switches the Mk3 into Programmer
 Mode. Send via 'Funktor.Hardware.MIDI.sendSysEx'.
 -}
 programmerModeSysEx :: LaunchpadConfig -> [Word8]
-programmerModeSysEx cfg = lpSysExHeader cfg ++ [0x0E, 0x01]
+programmerModeSysEx cfg = cfg.sysExHeader ++ [0x0E, 0x01]
 
 -- | SysEx payload (no F0/F7 framing) that returns the Mk3 to Live Mode.
 liveModeSysEx :: LaunchpadConfig -> [Word8]
-liveModeSysEx cfg = lpSysExHeader cfg ++ [0x0E, 0x00]
+liveModeSysEx cfg = cfg.sysExHeader ++ [0x0E, 0x00]
 
 {- | SysEx payload setting a single pad's LED to the given colour. The pad is
 addressed by its Programmer-Mode MIDI note (use 'gridToNote' for grid
@@ -124,20 +124,20 @@ coordinates).
 -}
 ledSysEx :: LaunchpadConfig -> Int -> Color -> [Word8]
 ledSysEx cfg note c =
-    lpSysExHeader cfg ++ [0x03, 0x03, fromIntegral note, r, g, b]
+    cfg.sysExHeader ++ [0x03, 0x03, fromIntegral note, r, g, b]
   where
     (r, g, b) = colorToRGB c
 
-{- | SysEx payload setting every pad in a 'Grid' to its 'padColor' in a single
+{- | SysEx payload setting every pad in a 'Grid' to its colour in a single
 multi-spec frame. Used to repaint the whole Launchpad on mode change.
 -}
 gridLedSysEx :: LaunchpadConfig -> Grid -> [Word8]
 gridLedSysEx cfg g =
-    lpSysExHeader cfg ++ [0x03] ++ concatMap spec coords
+    cfg.sysExHeader ++ [0x03] ++ concatMap spec coords
   where
     coords =
-        [ (x, y, padColor pad)
-        | (y, row) <- zip [0 ..] (gridPads g)
+        [ (x, y, pad.color)
+        | (y, row) <- zip [0 ..] g.pads
         , (x, pad) <- zip [0 ..] row
         ]
     spec (x, y, c) =

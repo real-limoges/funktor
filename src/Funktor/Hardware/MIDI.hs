@@ -58,10 +58,6 @@ import Funktor.Core.Types (Pitch (..), Velocity (..))
 import Sound.PortMidi qualified as PM
 import System.IO.Unsafe (unsafePerformIO)
 
--- ---------------------------------------------------------------------------
--- Pure data
--- ---------------------------------------------------------------------------
-
 {- | Parsed MIDI message. Channel fields are 0..15. Velocity is normalised to
 [0, 1] from the 7-bit MIDI range. PitchBend is the assembled 14-bit value
 (8192 = center). SysEx payloads exclude the F0/F7 framing bytes.
@@ -154,16 +150,12 @@ encodeMidiMessage m = case m of
          in fromIntegral (max 0 (min 127 scaled))
     clamp7 x = fromIntegral (max 0 (min 127 x))
 
--- ---------------------------------------------------------------------------
--- Device discovery
--- ---------------------------------------------------------------------------
-
 data MidiDeviceInfo = MidiDeviceInfo
-    { midiDevId :: !Int
-    , midiDevName :: !String
-    , midiDevInterface :: !String
-    , midiDevInput :: !Bool
-    , midiDevOutput :: !Bool
+    { devId :: !Int
+    , name :: !String
+    , interface :: !String
+    , input :: !Bool
+    , output :: !Bool
     }
     deriving (Eq, Show)
 
@@ -172,11 +164,11 @@ at 'initializeMidi' and 0.2 exposes no refresh primitive, so plugging in a
 device after this call won't make it appear; restart the process.
 -}
 listInputDevices :: IO [MidiDeviceInfo]
-listInputDevices = filter midiDevInput <$> listAllDevices
+listInputDevices = filter (.input) <$> listAllDevices
 
 -- | All output-capable devices visible to PortMidi.
 listOutputDevices :: IO [MidiDeviceInfo]
-listOutputDevices = filter midiDevOutput <$> listAllDevices
+listOutputDevices = filter (.output) <$> listAllDevices
 
 listAllDevices :: IO [MidiDeviceInfo]
 listAllDevices = do
@@ -188,16 +180,12 @@ listAllDevices = do
         di <- PM.getDeviceInfo i
         pure
             MidiDeviceInfo
-                { midiDevId = i
-                , midiDevName = PM.name di
-                , midiDevInterface = PM.interface di
-                , midiDevInput = PM.input di
-                , midiDevOutput = PM.output di
+                { devId = i
+                , name = PM.name di
+                , interface = PM.interface di
+                , input = PM.input di
+                , output = PM.output di
                 }
-
--- ---------------------------------------------------------------------------
--- Handles
--- ---------------------------------------------------------------------------
 
 data DeviceSelector
     = ByIndex !Int
@@ -205,10 +193,10 @@ data DeviceSelector
     deriving (Eq, Show)
 
 data MidiConfig = MidiConfig
-    { midiCfgDeviceSelector :: !DeviceSelector
-    , midiCfgBufferSize :: !Int
-    , midiCfgPollIntervalUs :: !Int
-    , midiCfgOutputLatencyMs :: !Int
+    { deviceSelector :: !DeviceSelector
+    , bufferSize :: !Int
+    , pollIntervalUs :: !Int
+    , outputLatencyMs :: !Int
     }
     deriving (Eq, Show)
 
@@ -219,10 +207,10 @@ in each direction wins.
 defaultMidiConfig :: MidiConfig
 defaultMidiConfig =
     MidiConfig
-        { midiCfgDeviceSelector = ByNameSubstring ""
-        , midiCfgBufferSize = 256
-        , midiCfgPollIntervalUs = 1000
-        , midiCfgOutputLatencyMs = 0
+        { deviceSelector = ByNameSubstring ""
+        , bufferSize = 256
+        , pollIntervalUs = 1000
+        , outputLatencyMs = 0
         }
 
 data Direction = DirIn | DirOut deriving (Eq, Show)
@@ -231,11 +219,11 @@ data Direction = DirIn | DirOut deriving (Eq, Show)
 unexported.
 -}
 data MidiHandle = MidiHandle
-    { mhStream :: !PM.PMStream
-    , mhDir :: !Direction
-    , mhDevId :: !Int
-    , mhName :: !String
-    , mhConfig :: !MidiConfig
+    { stream :: !PM.PMStream
+    , dir :: !Direction
+    , devId :: !Int
+    , name :: !String
+    , config :: !MidiConfig
     }
 
 {- | Open the first device matching the selector. Returns 'Left' with an
@@ -245,67 +233,63 @@ openInput :: MidiConfig -> IO (Either String MidiHandle)
 openInput cfg = do
     initializeMidi
     devs <- listInputDevices
-    case selectDevice (midiCfgDeviceSelector cfg) devs of
-        Nothing -> pure $ Left ("No input device matching " ++ show (midiCfgDeviceSelector cfg))
+    case selectDevice cfg.deviceSelector devs of
+        Nothing -> pure $ Left ("No input device matching " ++ show cfg.deviceSelector)
         Just dev -> do
-            res <- PM.openInput (midiDevId dev)
+            res <- PM.openInput dev.devId
             case res of
                 Left err -> pure $ Left ("PortMidi openInput failed: " ++ show err)
                 Right s ->
                     pure $
                         Right
                             MidiHandle
-                                { mhStream = s
-                                , mhDir = DirIn
-                                , mhDevId = midiDevId dev
-                                , mhName = midiDevName dev
-                                , mhConfig = cfg
+                                { stream = s
+                                , dir = DirIn
+                                , devId = dev.devId
+                                , name = dev.name
+                                , config = cfg
                                 }
 
 openOutput :: MidiConfig -> IO (Either String MidiHandle)
 openOutput cfg = do
     initializeMidi
     devs <- listOutputDevices
-    case selectDevice (midiCfgDeviceSelector cfg) devs of
-        Nothing -> pure $ Left ("No output device matching " ++ show (midiCfgDeviceSelector cfg))
+    case selectDevice cfg.deviceSelector devs of
+        Nothing -> pure $ Left ("No output device matching " ++ show cfg.deviceSelector)
         Just dev -> do
-            res <- PM.openOutput (midiDevId dev) (midiCfgOutputLatencyMs cfg)
+            res <- PM.openOutput dev.devId cfg.outputLatencyMs
             case res of
                 Left err -> pure $ Left ("PortMidi openOutput failed: " ++ show err)
                 Right s ->
                     pure $
                         Right
                             MidiHandle
-                                { mhStream = s
-                                , mhDir = DirOut
-                                , mhDevId = midiDevId dev
-                                , mhName = midiDevName dev
-                                , mhConfig = cfg
+                                { stream = s
+                                , dir = DirOut
+                                , devId = dev.devId
+                                , name = dev.name
+                                , config = cfg
                                 }
 
 closeMidi :: MidiHandle -> IO ()
-closeMidi h = void $ PM.close (mhStream h)
+closeMidi h = void $ PM.close h.stream
 
 {- | Human-readable device name from a 'MidiHandle'. Useful for status output
 ("MIDI input: Launchpad Mini Mk3 LPMiniMK3 MIDI Out").
 -}
 midiHandleName :: MidiHandle -> String
-midiHandleName = mhName
+midiHandleName h = h.name
 
 selectDevice :: DeviceSelector -> [MidiDeviceInfo] -> Maybe MidiDeviceInfo
 selectDevice sel devs = case sel of
-    ByIndex i -> case filter ((== i) . midiDevId) devs of
+    ByIndex i -> case filter ((== i) . (.devId)) devs of
         d : _ -> Just d
         [] -> Nothing
-    ByNameSubstring needle -> case filter (matches needle . midiDevName) devs of
+    ByNameSubstring needle -> case filter (matches needle . (.name)) devs of
         d : _ -> Just d
         [] -> Nothing
   where
-    matches needle name = map toLower needle `isInfixOf` map toLower name
-
--- ---------------------------------------------------------------------------
--- Sending
--- ---------------------------------------------------------------------------
+    matches needle n = map toLower needle `isInfixOf` map toLower n
 
 {- | Dispatches on the message kind: short messages go through 'PM.writeShort',
 SysEx through 'PM.writeSysEx'. 'Unknown' is sent as raw bytes (best-effort).
@@ -316,7 +300,7 @@ sendMessage h m = case m of
     _ -> sendShort h (encodeMidiMessage m)
 
 sendShort :: MidiHandle -> [Word8] -> IO ()
-sendShort h bs = void $ PM.writeShort (mhStream h) (PM.PMEvent (packShort bs) 0)
+sendShort h bs = void $ PM.writeShort h.stream (PM.PMEvent (packShort bs) 0)
 
 {- | Pack up to 3 bytes little-endian into a 32-bit message word (status in
 byte 0, data1 in byte 1, data2 in byte 2).
@@ -335,7 +319,7 @@ packShort bs = case bs of
 it in the input.
 -}
 sendSysEx :: MidiHandle -> [Word8] -> IO ()
-sendSysEx h bs = void $ PM.writeSysEx (mhStream h) 0 (toCString (0xF0 : bs ++ [0xF7]))
+sendSysEx h bs = void $ PM.writeSysEx h.stream 0 (toCString (0xF0 : bs ++ [0xF7]))
   where
     -- PortMidi's writeSysEx marshals a Haskell String through withCAString,
     -- treating each Char's low byte as a raw MIDI byte. SysEx data is 7-bit
@@ -343,18 +327,14 @@ sendSysEx h bs = void $ PM.writeSysEx (mhStream h) 0 (toCString (0xF0 : bs ++ [0
     -- that would truncate the C string.
     toCString = map (chr . fromIntegral)
 
--- ---------------------------------------------------------------------------
--- Input thread + SysEx reassembly
--- ---------------------------------------------------------------------------
-
 {- | Rolling state used by 'stepRx' to reassemble SysEx frames across multiple
 PortMidi events. Outside of an active SysEx run both fields are 'False' /
 empty respectively.
 -}
 data RxState = RxState
-    { rxInSysEx :: !Bool
+    { inSysEx :: !Bool
     -- ^ True between an 0xF0 status byte and the terminating 0xF7.
-    , rxBuf :: ![Word8]
+    , buf :: ![Word8]
     -- ^ Accumulated payload bytes in REVERSE order. Empty unless mid-sysex.
     }
     deriving (Eq, Show)
@@ -376,7 +356,7 @@ stepRx st (e : rest) =
 
 processEvent :: RxState -> PM.PMEvent -> ([MidiMessage], RxState)
 processEvent st e
-    | rxInSysEx st = case allEventBytes e of
+    | st.inSysEx = case allEventBytes e of
         b : _ | b >= 0xF8 -> ([shortMessageFromPM e], st)
         bs -> sysexConsume st bs
     | otherwise = case allEventBytes e of
@@ -389,8 +369,8 @@ and drop any trailing bytes in the same event (usually zero padding).
 sysexConsume :: RxState -> [Word8] -> ([MidiMessage], RxState)
 sysexConsume st [] = ([], st)
 sysexConsume st (b : bs)
-    | b == 0xF7 = ([SysEx (reverse (rxBuf st))], RxState False [])
-    | otherwise = sysexConsume st{rxBuf = b : rxBuf st} bs
+    | b == 0xF7 = ([SysEx (reverse st.buf)], RxState False [])
+    | otherwise = sysexConsume st{buf = b : st.buf} bs
 
 -- | Extract the 4 little-endian bytes from a PMEvent message word.
 allEventBytes :: PM.PMEvent -> [Word8]
@@ -423,8 +403,8 @@ shortMessageFromPM e =
 'MidiHandle' so 'stopInputThread' can close the stream after cancelling.
 -}
 data MidiInputThread = MidiInputThread
-    { mitAsync :: !(Async ())
-    , mitHandle :: !MidiHandle
+    { task :: !(Async ())
+    , handle :: !MidiHandle
     }
 
 {- | Spawn a background thread that polls the input handle and pushes parsed
@@ -434,20 +414,15 @@ end the loop.
 -}
 startInputThread :: MidiHandle -> TQueue MidiMessage -> IO MidiInputThread
 startInputThread h q = do
-    let pollUs = midiCfgPollIntervalUs (mhConfig h)
+    let pollUs = h.config.pollIntervalUs
     a <- Async.async (loop pollUs initialRxState)
-    pure
-        MidiInputThread
-            { mitAsync = a
-            , mitHandle = h
-            }
+    pure MidiInputThread{task = a, handle = h}
   where
     loop pollUs st = do
-        r <- PM.readEvents (mhStream h)
+        r <- PM.readEvents h.stream
         st' <- case r of
             -- Transient PortMidi error: skip this tick, the next will retry.
-            -- A persistent fault will keep firing until 'stopInputThread'
-            -- cancels the Async.
+            -- A persistent fault keeps firing until 'stopInputThread' cancels.
             Left _err -> pure st
             Right [] -> pure st
             Right evs -> do
@@ -463,17 +438,13 @@ freed memory.
 -}
 stopInputThread :: MidiInputThread -> IO ()
 stopInputThread mit = do
-    Async.cancel (mitAsync mit)
-    closeMidi (mitHandle mit)
+    Async.cancel mit.task
+    closeMidi mit.handle
 
--- ---------------------------------------------------------------------------
--- Scheduler routing
--- ---------------------------------------------------------------------------
-
-{- | Map an incoming 'MidiMessage' to an audio-pipeline action, or 'Nothing'
-if the message has no audible effect in the current pipeline. Tier 1
-collapses all channels to mono and ignores CC, pitch bend, aftertouch,
-program change, and sysex; channel-aware routing is a Tier 2/3 concern.
+{- | Collapse a MIDI keyboard message into a 'SchedulerAction'. Channels are
+ignored: the voice pool is mono-summed, so a note-on on any channel plays
+the same note. CC, pitch bend, aftertouch, program change, and SysEx have
+no audible effect in the current pipeline and return 'Nothing'.
 -}
 midiToSchedAction :: MidiMessage -> Maybe SchedulerAction
 midiToSchedAction msg = case msg of

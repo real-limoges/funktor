@@ -43,17 +43,17 @@ sineCallback :: TVar AudioState -> SDL.AudioFormat t -> VM.IOVector t -> IO ()
 sineCallback stateVar fmt buf = case fmt of
     SDL.FloatingLEAudio -> do
         st <- readTVarIO stateVar
-        let osc = audioOsc st
+        let o = st.osc
             len = VM.length buf
-            phaseInc = oscFreq osc / sampleRateHz
-            sampleAt i = realToFrac $ oscAmplitude osc * sin (2 * pi * (oscPhase osc + fromIntegral i * phaseInc))
-            finalPhase = wrapPhase (oscPhase osc + fromIntegral len * phaseInc)
+            phaseInc = o.freq / sampleRateHz
+            sampleAt i = realToFrac $ o.amplitude * sin (2 * pi * (o.phase + fromIntegral i * phaseInc))
+            finalPhase = wrapPhase (o.phase + fromIntegral len * phaseInc)
             timeAdvance = fromIntegral len / sampleRateHz
         mapM_ (\i -> VM.write buf i (sampleAt i)) [0 .. len - 1]
         atomically $ modifyTVar' stateVar $ \s ->
             s
-                { audioOsc = (audioOsc s){oscPhase = finalPhase}
-                , audioTime = audioTime s + timeAdvance
+                { osc = s.osc{phase = finalPhase}
+                , time = s.time + timeAdvance
                 }
     _ -> pure ()
 
@@ -64,9 +64,9 @@ closeDevice :: SDL.AudioDevice -> IO ()
 closeDevice = SDL.closeAudioDevice
 
 noteOn :: TVar AudioState -> Pitch -> Velocity -> IO ()
-noteOn stateVar pitch vel = atomically $ modifyTVar' stateVar $ \s ->
-    s{audioPool = poolNoteOn (audioTime s) pitch vel (audioPool s)}
+noteOn stateVar p vel = atomically $ modifyTVar' stateVar $ \s ->
+    s{pool = poolNoteOn s.time p vel s.pool}
 
 noteOff :: TVar AudioState -> Pitch -> IO ()
-noteOff stateVar pitch = atomically $ modifyTVar' stateVar $ \s ->
-    s{audioPool = poolNoteOff (audioTime s) pitch (audioPool s)}
+noteOff stateVar p = atomically $ modifyTVar' stateVar $ \s ->
+    s{pool = poolNoteOff s.time p s.pool}

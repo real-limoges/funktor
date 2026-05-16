@@ -25,8 +25,8 @@ tests =
              in prev @?= out
         , testCase "newDelayState produces an initialised vector" $ do
             st <- newDelayState 256
-            VM.length (delayBuffer st) @?= 256
-            delayWritePos st @?= 0
+            VM.length st.buffer @?= 256
+            st.writePos @?= 0
         , testCase "applyDelay with feedback=0, mix=0 returns dry input" $ do
             st <- newDelayState 64
             (out, _) <- applyDelay 0 0 st 0.5
@@ -34,5 +34,5 @@ tests =
         , testCase "applyDelay advances write pointer" $ do
             st <- newDelayState 64
             (_, st') <- applyDelay 0 0 st 0.5
-            delayWritePos st' @?= 1
+            st'.writePos @?= 1
         ]

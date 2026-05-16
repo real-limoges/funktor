@@ -45,6 +45,6 @@ tests =
         , testProperty "fromList returns events in beat order" $
             \(evs :: [Event Int]) (t0 :: Beat) (t1 :: Beat) ->
                 let out = runStream (fromList evs) t0 t1
-                    beats = map eventBeat out
+                    beats = map (.beat) out
                  in and (zipWith (<=) beats (drop 1 beats))
         ]

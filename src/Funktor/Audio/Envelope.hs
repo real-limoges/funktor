@@ -5,10 +5,10 @@ module Funktor.Audio.Envelope (
 ) where
 
 data EnvelopeParams = EnvelopeParams
-    { envAttack :: !Double
-    , envDecay :: !Double
-    , envSustain :: !Double
-    , envRelease :: !Double
+    { attack :: !Double
+    , decay :: !Double
+    , sustain :: !Double
+    , release :: !Double
     }
     deriving (Eq, Show)
 
