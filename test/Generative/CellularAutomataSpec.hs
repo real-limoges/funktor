@@ -62,4 +62,25 @@ tests =
             length (caSequence rule30 4 5) @?= 4
         , testCase "caStream with empty pitches is silence" $
             query (caStream rule30 3 5 []) (oneCycle (Beat 15)) @?= []
+        , testCase "caStream with pitches emits one note per live cell across the grid" $ do
+            -- 3 generations × 5 columns of rule30 from a center seed; every
+            -- live cell becomes a note placed on its (row, col) beat.
+            let rows = 3
+                cols = 5
+                gens = generations rule30 rows (centerSeed cols)
+                expectedLive = sum [length (filter id (V.toList r)) | r <- gens]
+                evs = query (caStream rule30 rows cols [Pitch 60, Pitch 62]) (oneCycle (Beat (fromIntegral (rows * cols))))
+            length evs @?= expectedLive
+            assertBool "pitches cycled from the supplied list" $
+                all (\e -> e.value `elem` [Note (Pitch 60) 1.0, Note (Pitch 62) 1.0]) evs
+        , testCase "rule110 is a non-trivial rule" $ do
+            -- Smoke test: rule110 differs from rule30 / rule90 on at least
+            -- one neighbourhood, and unRule round-trips.
+            unRule rule110 @?= 110
+            assertBool "rule110 ≠ rule30 somewhere" $
+                any
+                    (\(l, c, r) -> applyRule rule110 l c r /= applyRule rule30 l c r)
+                    [(l, c, r) | l <- [False, True], c <- [False, True], r <- [False, True]]
+        , testCase "columnDensity of empty input is empty" $
+            columnDensity [] @?= []
         ]

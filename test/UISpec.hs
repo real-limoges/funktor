@@ -1,6 +1,8 @@
 module UISpec (tests) where
 
+import Data.List (isInfixOf)
 import Funktor.Core.Types
+import Funktor.Grid (Color (..), Pad (..), PadAction (..), setPad)
 import Funktor.UI
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -33,4 +35,23 @@ tests =
         , testCase "renderUI emits one line per grid row plus header lines" $
             -- 3 header lines (title, transport, blank) + 8 grid rows
             length (renderUI initialUIState) @?= 11
+        , testCase "renderUI paints each non-Off color through colorChar" $ do
+            -- Paint one pad of each non-Off color so every colorChar
+            -- alternative fires at least once. Place them off the cursor
+            -- (cursor lives at (0,0) in initialUIState) so the symbol
+            -- renders without [] framing and we can scan for ' X '.
+            let colors = [Red, Green, Yellow, Blue, Purple, Cyan, White]
+                placed =
+                    foldr
+                        (\(c, col) g -> setPad c 1 (Pad NoAction col) g)
+                        initialUIState.uiGrid
+                        (zip [0 :: Int ..] colors)
+                rendered = unlines (renderUI initialUIState{uiGrid = placed})
+            mapM_
+                (\sym -> assertBool (sym ++ " present") ((" " ++ sym ++ " ") `isInfixOf` rendered))
+                ["R", "G", "Y", "B", "P", "C", "W"]
+        , testCase "renderUI brackets the cursor cell" $ do
+            -- The (0,0) cursor on initialUIState renders as `[.]` (Off + cursor).
+            let rendered = unlines (renderUI initialUIState)
+            assertBool "[.] framed" ("[.]" `isInfixOf` rendered)
         ]

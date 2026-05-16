@@ -48,12 +48,11 @@ applyDrop Drop3 ps = dropNthFromTop 3 ps
 dropNthFromTop :: Int -> [Pitch] -> [Pitch]
 dropNthFromTop n ps
     | n <= 0 || n > length ps = ps
-    | otherwise =
-        let sorted = sort ps
-            idx = length sorted - n
-            (before, target : after) = splitAt idx sorted
-            Pitch v = target
-         in sort (before ++ Pitch (v - 12) : after)
+    | otherwise = case splitAt (length sorted - n) sorted of
+        (before, Pitch v : after) -> sort (before ++ Pitch (v - 12) : after)
+        _ -> ps
+  where
+    sorted = sort ps
 
 -- | Whether every voice falls inside the closed range @[low, high]@.
 inRange :: PitchRange -> Voicing -> Bool

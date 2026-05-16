@@ -4,26 +4,29 @@ An interactive music application written in Haskell. Funktor models musical conc
 
 ## Status
 
-Early development. Pattern DSL, scheduler, MIDI input, and Launchpad grid
-binding all work end-to-end against a SuperCollider audio backend (`scsynth`).
-Some `Generative.*`, `Harmony.*`, `Live.Session` modules are stubbed for
-future work.
+Early development, but every named module has a real implementation — nothing
+in `src/` is `undefined`. Pattern DSL, scheduler, harmony, generative sources,
+MIDI input, Launchpad grid binding, recording, and the ASCII TUI all work
+end-to-end against a SuperCollider audio backend (`scsynth`).
 
 **What's working:**
 
-- Musical primitives: `Beat` (Rational), `Pitch`, `Velocity`, `Duration`, `Tempo`, `Event`, `Note`
+- Musical primitives: `Beat` (Rational), `Arc`, `Event { whole, part, value }`, `Pitch`, `Velocity`, `Duration`, `Tempo`, `Note`
 - Chord/scale types: `ChordSymbol`, `ChordQuality`, `Scale`, `ScaleDegree`
-- Pattern construction and composition: `append`, `stack`, `shift`, `scale`, `repeat_`
-- Infinite streams: `fromPattern`, `fromList`, `merge`, `mergeMany`, `shiftStream`
-- Harmony: `qualityIntervals`, `chordTones`, `scaleTones`
+- Streams as `Arc -> [Event a]` queries: `silence`, `periodic`, `fromList`, `singleton`, `cat`, `stack`, `slow`, `fast`, `shiftStream`, `merge`, `mergeMany`, `sometimes`, `everyN`, `pentatonic`
+- Harmony: `qualityIntervals`, `chordTones`, `scaleTones`; voicing (`bestVoicing`, `voiceLead`, Drop2/Drop3); jazz-scale analysis (`jazzScales`, `scalesForChord`, `chordsFromScale`, `classifyIntervals`)
+- Generative: Euclidean rhythms (`bjorklund`, `euclidean`, `polyEuclidean`), weighted Markov chains (`runChain`, `jazzBluesChain`), Wolfram cellular automata (`rule30`/`rule90`/`rule110`, `caStream`, `caRhythm`, `caSequence`)
 - Grid model: `Grid`, `Pad`, `Color`, `PadAction`, `setPad`, `getPad`
-- Audio backend: OSC client to SuperCollider's `scsynth` over UDP (synthesis runs in SC)
-- Scheduler: wall-clock-driven event scheduler (`GHC.Clock`-based) bridging `Stream Note` to OSC `/s_new` / `/n_set` calls
-- GHCi live interface: `play`, `stop`, `setTempo` with atomic stream hot-swap; session survives `:reload` via `foreign-store`
+- Grid binding: `Sequencer` / `Instrument` / `Scene` modes via `pressPad` / `releasePad` and `setGridMode`
+- Audio backend: `hosc` OSC client to SuperCollider's `scsynth` over UDP (synthesis, voice pool, envelopes, and effects all run in SC)
+- Scheduler: wall-clock-driven event scheduler (`GHC.Clock`-based) bridging `Stream Note` to OSC `/s_new` / `/n_set` / `/n_free` calls; `hotSwap` + `enqueueImmediate` exposed as public `STM` actions
+- GHCi live interface: `play`, `stop`, `reload`, `setTempo` with atomic stream hot-swap; session survives `:reload` via `foreign-store`; `fsnotify` watcher auto-prompts on `.hs` saves
 - MIDI input: PortMidi-backed device enumeration, note-in / CC-in / sysex-out, background reassembly thread, scheduler wiring (`startMidi` / `stopMidi`)
-- Launchpad: Mk3 SysEx + grid binding (Sequencer / Instrument / Scene modes)
+- Launchpad: Mk3 SysEx + grid binding (Sequencer / Instrument / Scene modes), router thread, full 9x9 surface (8x8 grid + top control row + right control column)
+- Session recording: `startRecording` / `recordEvent` / `materializeSession` / `exportMidi` (Type-0 SMF via a hand-rolled `Data.ByteString.Builder` encoder)
+- TUI: pure `applyEvent` reducer + `renderUI` ASCII layout, driven by `runUI` over the scheduler `TVar`
 
-**Stubbed for future implementation:** Generative (Euclidean rhythms, Markov chains, cellular automata), Harmony voicing/analysis/extensions, Session recording. See `docs/architecture.md` for the stub inventory.
+See `docs/architecture.md` for the module-level inventory and `docs/state-and-roadmap.md` for the full feature breakdown plus what's deliberately out of scope.
 
 ## Building
 
@@ -86,32 +89,38 @@ src/
   Funktor.hs                       -- Top-level re-export module
   Funktor/
     Core/
-      Types.hs                     -- Musical primitives and chord/scale types
-      Pattern.hs                   -- Finite, composable musical sequences
-      Stream.hs                    -- Infinite, query-by-time-range sequences
-    Audio.hs                       -- thin facade (openDevice/noteOn/noteOff)
+      Types.hs                     -- Beat/Arc/Event/Pitch + chord/scale types
+      Stream.hs                    -- Arc -> [Event a] query model + smart ctors
+    Audio.hs                       -- Thin facade (openDevice/noteOn/noteOff)
     Audio/
-      SC.hs                        -- OSC client to scsynth (UDP)
-      Scheduler.hs                 -- Wall-clock event scheduler
+      SC.hs                        -- hosc OSC client to scsynth (UDP)
+      Scheduler.hs                 -- Wall-clock event scheduler + hotSwap
       Timbre.hs                    -- SynthDef name + override params
     Harmony.hs                     -- Chord/scale interval math
-    Harmony/                       -- (stubs: Voicing, Analysis)
+    Harmony/
+      Voicing.hs                   -- Inversions, drops, voice leading
+      Analysis.hs                  -- Jazz scales + chord/scale matching
+    Generative/
+      Euclidean.hs                 -- Bjorklund pulse distribution
+      Markov.hs                    -- Weighted transition chains
+      CellularAutomata.hs          -- Wolfram rules + pattern shapers
     Grid.hs                        -- Pad grid model
     Grid/
       Binding.hs                   -- Sequencer / Instrument / Scene dispatcher
-    Generative/                    -- (stubs: Euclidean, Markov, CellularAutomata)
     Hardware/
-      MIDI.hs                      -- PortMidi-backed input/output + scheduler routing
-      Launchpad.hs                 -- Launchpad Mk3 SysEx + pad-note translation
-    Live.hs                        -- GHCi live interface (play/stop/setTempo/startMidi/startLaunchpad)
+      MIDI.hs                      -- PortMidi I/O + router thread     (midi flag)
+      Launchpad.hs                 -- Launchpad Mk3 SysEx + translation (midi flag)
+    Live.hs                        -- GHCi live interface
     Live/
       Reload.hs                    -- fsnotify watcher + foreign-store persistence
-      Session.hs                   -- (stub)
-    UI.hs                          -- Console dashboard (renderUI / runUI)
+      Session.hs                   -- Recording + Type-0 SMF export
+    UI.hs                          -- ASCII dashboard (renderUI / runUI)
 synthdefs/
   funktor.scd                      -- SuperCollider source the user evaluates once
 docs/
-  architecture.md                  -- Working architecture reference
+  architecture.md                  -- Module wiring + design decisions
+  state-and-roadmap.md             -- What works, what's deferred, soft spots
+  api.md                           -- Deferred Fugue web-integration sketch
 ```
 
 ## License

@@ -219,9 +219,9 @@ ensureWatcher = do
         _ -> pure ()
 
 hotSwap :: LiveState -> Stream Note -> IO ()
-hotSwap st stream = atomically $ do
-    Scheduler.hotSwap (st.schedVar) stream
-    modifyTVar' globalLive $ fmap $ \s -> s{stream = stream}
+hotSwap st newStream = atomically $ do
+    Scheduler.hotSwap (st.schedVar) newStream
+    modifyTVar' globalLive $ fmap $ \s -> s{Funktor.Live.stream = newStream}
 
 {- | Stop the live session and clean up all resources. Teardown order
 preserves the invariants of each subsystem: the watcher dies first (so its
@@ -264,10 +264,10 @@ setTempo t = do
             putStrLn $ "Tempo: " ++ show (unTempo t) ++ " BPM"
 
 setSchedTempo :: Tempo -> SchedulerState -> SchedulerState
-setSchedTempo t s = s{tempo = t}
+setSchedTempo t s = s{Scheduler.tempo = t}
 
 setLiveTempo :: Tempo -> LiveState -> LiveState
-setLiveTempo t s = s{tempo = t}
+setLiveTempo t s = s{Funktor.Live.tempo = t}
 
 #ifdef MIDI_ENABLED
 
