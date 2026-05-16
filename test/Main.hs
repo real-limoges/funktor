@@ -22,11 +22,18 @@ import Audio.StateSpec qualified as AudioState
 import Audio.VoiceSpec qualified as AudioVoice
 
 -- Pure domains
+import Generative.CellularAutomataSpec qualified as GenerativeCA
+import Generative.EuclideanSpec qualified as GenerativeEuclidean
+import Generative.MarkovSpec qualified as GenerativeMarkov
 import GridBindingSpec qualified as GridBinding
 import GridSpec qualified as Grid
+import Harmony.AnalysisSpec qualified as HarmonyAnalysis
+import Harmony.VoicingSpec qualified as HarmonyVoicing
 import HarmonySpec qualified as Harmony
 import Live.ReloadSpec qualified as LiveReload
+import Live.SessionSpec qualified as LiveSession
 import LiveSpec qualified as Live
+import UISpec qualified as UI
 
 #ifdef MIDI_ENABLED
 import HardwareSpec qualified as Hardware
@@ -55,10 +62,17 @@ main =
             , AudioEffects.tests
             , AudioScheduler.tests
             , AudioTop.tests
+            , GenerativeCA.tests
+            , GenerativeEuclidean.tests
+            , GenerativeMarkov.tests
             , Grid.tests
             , GridBinding.tests
             , Harmony.tests
+            , HarmonyAnalysis.tests
+            , HarmonyVoicing.tests
             , Live.tests
             , LiveReload.tests
+            , LiveSession.tests
+            , UI.tests
             ]
                 <> hardwareTests

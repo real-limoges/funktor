@@ -11,7 +11,8 @@ import Funktor.Audio.Scheduler (
     SchedulerState (..),
     initialSchedulerState,
  )
-import Funktor.Audio.State (createSineAudioState)
+import Funktor.Audio.State (createAudioState)
+import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Stream (Stream, runStream, silence)
 import Funktor.Core.Types (
     Beat (..),
@@ -192,7 +193,7 @@ pressPadSmokeTests =
             sched <- readTVarIO engine.schedVar
             let pending = map (.action) sched.pending
             assertBool "expected a SchedNoteOn for column 2 of default instrument" $
-                SchedNoteOn (Pitch 38) (Velocity 0.8) `elem` pending
+                SchedNoteOn (Pitch 38) (Velocity 0.8) defaultTimbre `elem` pending
         , testCase "InstrumentMode release enqueues SchedNoteOff" $ do
             engine <- newEngine
             setMode engine (InstrumentMode defaultInstrumentConfig)
@@ -204,6 +205,6 @@ pressPadSmokeTests =
         ]
   where
     newEngine = do
-        audioVar <- newTVarIO (createSineAudioState 440 0)
+        audioVar <- newTVarIO createAudioState
         schedVar <- newTVarIO (initialSchedulerState silence (Tempo 120) 0)
         newAudioEngine audioVar schedVar

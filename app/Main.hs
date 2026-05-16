@@ -2,6 +2,7 @@ module Main where
 
 import Control.Concurrent (threadDelay)
 import Funktor.Audio
+import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Types (Pitch (..), Velocity (..))
 
 main :: IO ()
@@ -10,7 +11,7 @@ main = do
     putStrLn "Use GHCi with ':m Funktor.Live Funktor' to control playback interactively"
 
     (device, stateVar) <- openDevice
-    noteOn stateVar (Pitch 69) (Velocity 1.0)
+    noteOn stateVar (Pitch 69) (Velocity 1.0) defaultTimbre
     threadDelay 1000000
     noteOff stateVar (Pitch 69)
     closeDevice device

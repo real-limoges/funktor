@@ -35,6 +35,7 @@ library
                       Funktor.Audio.Scheduler
                       Funktor.Audio.Voice
                       Funktor.Audio.Sine
+                      Funktor.Audio.Timbre
                       Funktor.Core.Pattern
                       Funktor.Core.Stream
                       Funktor.Core.Types
@@ -55,6 +56,7 @@ library
     default-extensions: OverloadedRecordDot, DuplicateRecordFields
     build-depends:    base >= 4.21 && < 4.23
                     , async >= 2.2 && < 2.3
+                    , bytestring >= 0.11
                     , containers >= 0.6
                     , foreign-store >= 0.2 && < 0.3
                     , fsnotify >= 0.4 && < 0.5
@@ -105,20 +107,31 @@ test-suite funktor-test
                       Audio.StateSpec
                       Audio.VoiceSpec
                       Audio.SineSpec
+                      Generative.CellularAutomataSpec
+                      Generative.EuclideanSpec
+                      Generative.MarkovSpec
                       GridSpec
                       GridBindingSpec
+                      Harmony.AnalysisSpec
+                      Harmony.VoicingSpec
                       HarmonySpec
                       LiveSpec
                       Live.ReloadSpec
+                      Live.SessionSpec
+                      UISpec
     build-depends:
         base >= 4.21 && < 4.23,
         funktor,
         HUnit >= 1.6,
+        bytestring >= 0.11,
         containers >= 0.6,
+        directory >= 1.3,
+        filepath >= 1.4,
         tasty >= 1.5,
         tasty-hunit >= 0.10,
         tasty-quickcheck >= 0.10,
         QuickCheck >= 2.14,
+        random >= 1.2,
         stm >= 2.5,
         vector >= 0.12,
         sdl2 >= 2.5,

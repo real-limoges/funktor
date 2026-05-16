@@ -42,6 +42,7 @@ import Data.Map.Strict qualified as Map
 import Data.Vector qualified as V
 import Funktor.Audio.Scheduler (SchedulerAction (..), SchedulerState, enqueueImmediate, hotSwap)
 import Funktor.Audio.State (AudioState)
+import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Pattern (Pattern (..))
 import Funktor.Core.Stream (Stream, fromPattern, silence)
 import Funktor.Core.Types (
@@ -127,7 +128,7 @@ pressPad x y e vel = atomically $ do
     m <- readTVar e.mode
     case m of
         InstrumentMode cfg ->
-            enqueueImmediate e.schedVar (SchedNoteOn (padToPitch cfg x y) vel)
+            enqueueImmediate e.schedVar (SchedNoteOn (padToPitch cfg x y) vel defaultTimbre)
         SequencerMode st -> do
             let st' = setStep x y st
             modifyTVar' e.mode (const (SequencerMode st'))

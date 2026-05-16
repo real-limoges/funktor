@@ -3,6 +3,7 @@ module Funktor.Core.Stream where
 import Data.List (sortOn)
 import Funktor.Core.Pattern (Pattern (..))
 import Funktor.Core.Types
+import System.Random (StdGen, randomR)
 
 newtype Stream a = Stream
     { runStream :: Beat -> Beat -> [Event a]
@@ -54,3 +55,32 @@ merge (Stream q1) (Stream q2) = Stream $ \t0 t1 ->
 
 mergeMany :: [Stream a] -> Stream a
 mergeMany = foldr merge silence
+
+{- | @sometimes p gen f s@ applies @f@ to @s@ with probability @p@, otherwise
+returns @s@ unchanged. The decision is made once at construction time using
+@gen@; pass a fresh 'StdGen' to re-roll. @p <= 0@ is the identity, @p >= 1@
+always applies @f@.
+-}
+sometimes :: Double -> StdGen -> (Stream a -> Stream a) -> Stream a -> Stream a
+sometimes prob gen f s
+    | prob <= 0 = s
+    | prob >= 1 = f s
+    | r < prob = f s
+    | otherwise = s
+  where
+    (r, _) = randomR (0.0 :: Double, 1.0) gen
+
+{- | @everyN n f s@ applies @f@ to events whose integer-beat cycle index is
+a multiple of @n@; other events pass through. @everyN 1 f = f@; non-positive
+@n@ is the identity.
+-}
+everyN :: Int -> (Stream a -> Stream a) -> Stream a -> Stream a
+everyN n f s
+    | n <= 0 = s
+    | n == 1 = f s
+    | otherwise = Stream $ \t0 t1 ->
+        let fEvents = filter inCycle (runStream (f s) t0 t1)
+            otherEvents = filter (not . inCycle) (runStream s t0 t1)
+         in sortOn (.beat) (fEvents ++ otherEvents)
+  where
+    inCycle (Event (Beat b) _) = (floor b :: Integer) `mod` fromIntegral n == 0

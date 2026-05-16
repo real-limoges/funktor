@@ -6,6 +6,7 @@ import Data.Bits (shiftL, (.|.))
 import Data.Word (Word8)
 import Foreign.C.Types (CLong)
 import Funktor.Audio.Scheduler (SchedulerAction (..))
+import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Types (Pitch (..), Velocity (..))
 import Funktor.Hardware.MIDI (
     MidiMessage (..),
@@ -45,13 +46,13 @@ routerTests =
         "midiToSchedAction"
         [ testCase "NoteOn routes to SchedNoteOn" $
             midiToSchedAction (NoteOn 0 (Pitch 60) (Velocity 1))
-                @?= Just (SchedNoteOn (Pitch 60) (Velocity 1))
+                @?= Just (SchedNoteOn (Pitch 60) (Velocity 1) defaultTimbre)
         , testCase "NoteOff routes to SchedNoteOff" $
             midiToSchedAction (NoteOff 5 (Pitch 64) (Velocity 0))
                 @?= Just (SchedNoteOff (Pitch 64))
         , testCase "Channel is ignored (mono collapse)" $
             midiToSchedAction (NoteOn 7 (Pitch 60) (Velocity 0.5))
-                @?= Just (SchedNoteOn (Pitch 60) (Velocity 0.5))
+                @?= Just (SchedNoteOn (Pitch 60) (Velocity 0.5) defaultTimbre)
         , testCase "ControlChange drops to Nothing" $
             midiToSchedAction (ControlChange 0 7 100) @?= Nothing
         , testCase "PitchBend drops to Nothing" $

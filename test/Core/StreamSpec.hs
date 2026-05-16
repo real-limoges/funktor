@@ -9,6 +9,7 @@ import Data.List (sort)
 import Funktor.Core.Pattern (Pattern)
 import Funktor.Core.Stream
 import Funktor.Core.Types
+import System.Random (mkStdGen)
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Utils.Arbitrary ()
 
@@ -47,4 +48,23 @@ tests =
                 let out = runStream (fromList evs) t0 t1
                     beats = map (.beat) out
                  in and (zipWith (<=) beats (drop 1 beats))
+        , testCase "sometimes p=0 leaves stream unchanged" $
+            let s = fromList [Event (Beat 0) (1 :: Int)]
+                t = sometimes 0 (mkStdGen 1) (shiftStream (Beat 10)) s
+             in runStream t (Beat 0) (Beat 1) @?= [Event (Beat 0) 1]
+        , testCase "sometimes p=1 always applies f" $
+            let s = fromList [Event (Beat 0) (1 :: Int)]
+                t = sometimes 1 (mkStdGen 1) (shiftStream (Beat 5)) s
+             in runStream t (Beat 0) (Beat 1) @?= []
+        , testCase "everyN 1 f equals f" $
+            let s = fromList [Event (Beat 0) (1 :: Int), Event (Beat 2) 2]
+                t = everyN 1 (shiftStream (Beat 100)) s
+             in runStream t (Beat 0) (Beat 10) @?= []
+        , testCase "everyN n=2 keeps events on cycle 0 transformed" $
+            let s = fromList [Event (Beat 0) (1 :: Int), Event (Beat 1) 2]
+                -- 0.0 is in cycle 0 (multiple of 2), so it's transformed (dropped from window)
+                -- 1.0 is in cycle 1, untouched
+                t = everyN 2 (fmap (* 10)) s
+                out = runStream t (Beat 0) (Beat 2)
+             in map (.value) out @?= [10, 2]
         ]

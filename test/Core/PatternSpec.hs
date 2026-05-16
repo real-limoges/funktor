@@ -49,4 +49,30 @@ tests =
             filterEvents (const True) p == p
         , testProperty "filterEvents (const False) removes events" $ \(p :: Pattern Int) ->
             isEmpty (filterEvents (const False) p)
+        , testProperty "fast 1 is identity" $ \(p :: Pattern Int) ->
+            fast 1 p == p
+        , testProperty "slow 1 is identity" $ \(p :: Pattern Int) ->
+            slow 1 p == p
+        , testCase "fast 2 halves duration" $
+            (fast 2 (singleton 4 (0 :: Int))).duration @?= Duration 2
+        , testCase "slow 2 doubles duration" $
+            (slow 2 (singleton 4 (0 :: Int))).duration @?= Duration 8
+        , testProperty "every 1 f equals f" $ \(p :: Pattern Int) ->
+            every 1 (scale 2) p == scale 2 p
+        , testProperty "every n id equals repeat_ n" $ \(NonNegative k) (p :: Pattern Int) ->
+            let n = k + 1
+             in every n id p == repeat_ n p
+        , testCase "every n with duration-preserving f equals repeat_ n in duration" $
+            let p = singleton 1 (0 :: Int)
+             in (every 4 (shift (Beat 0)) p).duration @?= Duration 4
+        , testCase "chunk 1 f equals f" $
+            let p = singleton 1 (0 :: Int)
+             in chunk 1 (scale 2) p @?= scale 2 p
+        , testCase "chunk n id has duration n * pat.duration" $
+            let p = singleton 1 (0 :: Int)
+             in (chunk 3 id p).duration @?= Duration 3
+        , testCase "sliceWindow restricts and shifts" $
+            let p = pattern_ 4 [Event 0 (0 :: Int), Event 1 1, Event 2 2, Event 3 3]
+                w = sliceWindow 1 3 p
+             in (w.duration, map (.beat) w.events) @?= (Duration 2, [Beat 0, Beat 1])
         ]

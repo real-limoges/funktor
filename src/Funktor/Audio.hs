@@ -3,28 +3,24 @@ module Funktor.Audio (
     closeDevice,
     noteOn,
     noteOff,
-    sineCallback,
 
     -- * Types
     AudioState (..),
-    OscState (..),
-    createSineAudioState,
+    createAudioState,
 ) where
 
-import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO)
-import Data.Vector.Storable.Mutable qualified as VM
+import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO)
+import Funktor.Audio.Sine (sineCallback)
 import Funktor.Audio.State
+import Funktor.Audio.Timbre (Timbre)
 import Funktor.Audio.Voice (poolNoteOff, poolNoteOn)
 import Funktor.Core.Types (Pitch, Velocity)
 import SDL qualified
 
-sampleRateHz :: Double
-sampleRateHz = 44100
-
 openDevice :: IO (SDL.AudioDevice, TVar AudioState)
 openDevice = do
     SDL.initialize [SDL.InitAudio]
-    stateVar <- newTVarIO $ createSineAudioState 261.63 0.5
+    stateVar <- newTVarIO createAudioState
     (dev, _) <-
         SDL.openAudioDevice
             SDL.OpenDeviceSpec
@@ -39,33 +35,12 @@ openDevice = do
     SDL.setAudioDevicePlaybackState dev SDL.Play
     pure (dev, stateVar)
 
-sineCallback :: TVar AudioState -> SDL.AudioFormat t -> VM.IOVector t -> IO ()
-sineCallback stateVar fmt buf = case fmt of
-    SDL.FloatingLEAudio -> do
-        st <- readTVarIO stateVar
-        let o = st.osc
-            len = VM.length buf
-            phaseInc = o.freq / sampleRateHz
-            sampleAt i = realToFrac $ o.amplitude * sin (2 * pi * (o.phase + fromIntegral i * phaseInc))
-            finalPhase = wrapPhase (o.phase + fromIntegral len * phaseInc)
-            timeAdvance = fromIntegral len / sampleRateHz
-        mapM_ (\i -> VM.write buf i (sampleAt i)) [0 .. len - 1]
-        atomically $ modifyTVar' stateVar $ \s ->
-            s
-                { osc = s.osc{phase = finalPhase}
-                , time = s.time + timeAdvance
-                }
-    _ -> pure ()
-
-wrapPhase :: Double -> Double
-wrapPhase p = p - fromIntegral (floor p :: Int)
-
 closeDevice :: SDL.AudioDevice -> IO ()
 closeDevice = SDL.closeAudioDevice
 
-noteOn :: TVar AudioState -> Pitch -> Velocity -> IO ()
-noteOn stateVar p vel = atomically $ modifyTVar' stateVar $ \s ->
-    s{pool = poolNoteOn s.time p vel s.pool}
+noteOn :: TVar AudioState -> Pitch -> Velocity -> Timbre -> IO ()
+noteOn stateVar p vel t = atomically $ modifyTVar' stateVar $ \s ->
+    s{pool = poolNoteOn s.time p vel t s.pool}
 
 noteOff :: TVar AudioState -> Pitch -> IO ()
 noteOff stateVar p = atomically $ modifyTVar' stateVar $ \s ->

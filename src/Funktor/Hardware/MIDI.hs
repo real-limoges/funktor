@@ -54,6 +54,7 @@ import Data.List (isInfixOf)
 import Data.Word (Word8)
 import Foreign.C.Types (CLong)
 import Funktor.Audio.Scheduler (SchedulerAction (..), SchedulerState, enqueueImmediate)
+import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Types (Pitch (..), Velocity (..))
 import Sound.PortMidi qualified as PM
 import System.IO.Unsafe (unsafePerformIO)
@@ -448,7 +449,7 @@ no audible effect in the current pipeline and return 'Nothing'.
 -}
 midiToSchedAction :: MidiMessage -> Maybe SchedulerAction
 midiToSchedAction msg = case msg of
-    NoteOn _ p v -> Just (SchedNoteOn p v)
+    NoteOn _ p v -> Just (SchedNoteOn p v defaultTimbre)
     NoteOff _ p _ -> Just (SchedNoteOff p)
     _ -> Nothing
 

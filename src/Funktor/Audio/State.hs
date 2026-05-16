@@ -1,12 +1,10 @@
 module Funktor.Audio.State (
     AudioState (..),
-    OscState (..),
     sampleRate,
     bufferSize,
-    createSineAudioState,
+    createAudioState,
 ) where
 
-import Funktor.Audio.Envelope (EnvelopeParams, defaultEnvelope)
 import Funktor.Audio.Voice (VoicePool, emptyPool)
 
 sampleRate :: Double
@@ -15,26 +13,19 @@ sampleRate = 44100
 bufferSize :: Int
 bufferSize = 512
 
-data OscState = OscState
-    { freq :: !Double
-    , phase :: !Double
-    , amplitude :: !Double
-    }
-    deriving (Show)
-
+{- | Mutable audio engine state. The envelope was historically global; voices
+now carry their own envelope via 'Funktor.Audio.Timbre.Timbre', so only the
+voice pool and wall-clock cursor live here.
+-}
 data AudioState = AudioState
-    { osc :: !OscState
-    , envelope :: !EnvelopeParams
-    , time :: !Double
+    { time :: !Double
     , pool :: !VoicePool
     }
     deriving (Show)
 
-createSineAudioState :: Double -> Double -> AudioState
-createSineAudioState f amp =
+createAudioState :: AudioState
+createAudioState =
     AudioState
-        { osc = OscState f 0.0 amp
-        , envelope = defaultEnvelope
-        , time = 0.0
+        { time = 0.0
         , pool = emptyPool
         }

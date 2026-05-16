@@ -9,6 +9,8 @@ import Test.Tasty.QuickCheck (testProperty)
 import Data.Maybe (isJust)
 import Data.Vector qualified as V
 import Funktor.Audio.Envelope (EnvelopeParams (..), defaultEnvelope)
+import Funktor.Audio.Oscillator (Waveform (..))
+import Funktor.Audio.Timbre (Timbre (..), defaultTimbre)
 import Funktor.Audio.Voice
 import Funktor.Core.Types (Pitch (..), Velocity (..), midiToFreq)
 import Test.Utils.Arbitrary ()
@@ -20,6 +22,10 @@ makeVoice t p v age =
         , freq = midiToFreq p
         , phase = 0
         , velocity = v
+        , waveform = Sine
+        , cutoffHz = 20000
+        , envelope = defaultEnvelope
+        , lowPassPrev = 0
         , noteOnAt = t
         , noteOffAt = Nothing
         , age = age
@@ -45,7 +51,7 @@ tests =
             let v = makeVoice 0 p (Velocity 1) 0
              in abs (v.freq - midiToFreq p) < 1e-9
         , testCase "poolNoteOff records first off-time" $ do
-            let pool = poolNoteOn 0 (Pitch 60) (Velocity 0.5) emptyPool
+            let pool = poolNoteOn 0 (Pitch 60) (Velocity 0.5) defaultTimbre emptyPool
                 pool' = poolNoteOff 1 (Pitch 60) pool
                 pool'' = poolNoteOff 2 (Pitch 60) pool'
                 firstVoice = V.find isJust pool''.voices
@@ -58,9 +64,10 @@ tests =
                 v =
                     (makeVoice onT (Pitch 60) (Velocity 0.5) 0)
                         { noteOffAt = Just offT
+                        , envelope = params
                         }
                 t = offT + params.release + 0.2
-             in isVoiceDone params t v
+             in isVoiceDone t v
         , testCase "cleanupVoices removes done voices" $ do
             let params = defaultEnvelope
                 offT = 1.0 :: Double
@@ -70,7 +77,7 @@ tests =
                     V.fromList [Just vDone, Just vAlive]
                         V.++ V.replicate (maxVoices - 2) Nothing
                 pool = VoicePool{voices = vs, nextAge = 2}
-                cleaned = cleanupVoices params (offT + params.release + 0.2) pool
+                cleaned = cleanupVoices (offT + params.release + 0.2) pool
                 remain = V.filter isJust cleaned.voices
             assertBool "only alive remains" (V.length remain == 1)
         , testCase "cleanupVoices preserves slot count" $
@@ -81,11 +88,18 @@ tests =
                 vDone = (makeVoice 0 (Pitch 60) (Velocity 0.5) 0){noteOffAt = Just offT}
                 vs = V.fromList [Just vDone] V.++ V.replicate (maxVoices - 1) Nothing
                 pool = VoicePool{voices = vs, nextAge = 1}
-                cleaned = cleanupVoices params (offT + params.release + 0.2) pool
+                cleaned = cleanupVoices (offT + params.release + 0.2) pool
              in assertBool "length preserved" (V.length cleaned.voices == maxVoices)
         , testCase "findSlot picks 0 on empty pool" $
             assertBool "slot 0" (findSlot emptyPool == 0)
         , testCase "poolNoteOn increments nextAge" $
-            let p = poolNoteOn 0 (Pitch 60) (Velocity 0.5) emptyPool
+            let p = poolNoteOn 0 (Pitch 60) (Velocity 0.5) defaultTimbre emptyPool
              in assertBool "age incremented" (p.nextAge == emptyPool.nextAge + 1)
+        , testCase "poolNoteOn copies waveform from timbre" $
+            let tim = Timbre Sawtooth 20000 defaultEnvelope
+                p = poolNoteOn 0 (Pitch 60) (Velocity 0.5) tim emptyPool
+                firstVoice = V.head p.voices
+             in case firstVoice of
+                    Just v -> assertBool "got sawtooth" (v.waveform == Sawtooth)
+                    Nothing -> assertBool "voice present" False
         ]

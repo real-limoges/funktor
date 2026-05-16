@@ -13,6 +13,8 @@ module Funktor.Audio.Voice (
 import Data.Maybe (isNothing)
 import Data.Vector qualified as V
 import Funktor.Audio.Envelope (EnvelopeParams (..))
+import Funktor.Audio.Oscillator (Waveform (..))
+import Funktor.Audio.Timbre (Timbre (..))
 import Funktor.Core.Types (Pitch, Velocity, midiToFreq)
 
 data Voice = Voice
@@ -20,6 +22,10 @@ data Voice = Voice
     , freq :: !Double
     , phase :: !Double
     , velocity :: !Velocity
+    , waveform :: !Waveform
+    , cutoffHz :: !Double
+    , envelope :: !EnvelopeParams
+    , lowPassPrev :: !Double
     , noteOnAt :: !Double
     , noteOffAt :: !(Maybe Double)
     , age :: !Int
@@ -38,18 +44,18 @@ maxVoices = 8
 emptyPool :: VoicePool
 emptyPool = VoicePool (V.replicate maxVoices Nothing) 0
 
-{- | A voice is reclaimable once it has been released for the full envelope
+{- | A voice is reclaimable once it has been released for its own envelope's
 release plus a 100ms tail. The tail keeps a slot reserved across one or two
 extra audio buffers so the release curve isn't truncated by wall-clock jitter
 between the scheduler tick and the next callback.
 -}
-isVoiceDone :: EnvelopeParams -> Double -> Voice -> Bool
-isVoiceDone params currentTime voice = case voice.noteOffAt of
+isVoiceDone :: Double -> Voice -> Bool
+isVoiceDone currentTime voice = case voice.noteOffAt of
     Nothing -> False
-    Just t -> (currentTime - t) >= params.release + 0.1
+    Just t -> (currentTime - t) >= voice.envelope.release + 0.1
 
-poolNoteOn :: Double -> Pitch -> Velocity -> VoicePool -> VoicePool
-poolNoteOn currentTime p v pool =
+poolNoteOn :: Double -> Pitch -> Velocity -> Timbre -> VoicePool -> VoicePool
+poolNoteOn currentTime p v timbre pool =
     pool
         { voices = pool.voices V.// [(findSlot pool, Just newVoice)]
         , nextAge = pool.nextAge + 1
@@ -61,6 +67,10 @@ poolNoteOn currentTime p v pool =
             , freq = midiToFreq p
             , phase = 0
             , velocity = v
+            , waveform = timbre.waveform
+            , cutoffHz = timbre.cutoffHz
+            , envelope = timbre.envelope
+            , lowPassPrev = 0
             , noteOnAt = currentTime
             , noteOffAt = Nothing
             , age = pool.nextAge
@@ -87,9 +97,9 @@ oldestSlot vs = snd $ V.ifoldl' step (maxBound, 0) vs
         | otherwise = acc
     step acc _ Nothing = acc
 
-cleanupVoices :: EnvelopeParams -> Double -> VoicePool -> VoicePool
-cleanupVoices params currentTime pool =
+cleanupVoices :: Double -> VoicePool -> VoicePool
+cleanupVoices currentTime pool =
     pool{voices = V.map clear pool.voices}
   where
-    clear (Just v) | isVoiceDone params currentTime v = Nothing
+    clear (Just v) | isVoiceDone currentTime v = Nothing
     clear mv = mv

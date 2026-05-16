@@ -14,13 +14,14 @@ import Control.Concurrent.STM.TVar (modifyTVar')
 import Control.Monad (forever)
 import Data.List qualified as L
 import Funktor.Audio.State (AudioState (..))
+import Funktor.Audio.Timbre (Timbre, defaultTimbre)
 import Funktor.Audio.Voice (poolNoteOff, poolNoteOn)
 import Funktor.Core.Stream (Stream, runStream)
 import Funktor.Core.Types (Beat (..), Duration (..), Event (..), Note (..), Pitch, Tempo (..), Velocity)
 import GHC.Clock (getMonotonicTime)
 
 data SchedulerAction
-    = SchedNoteOn !Pitch !Velocity
+    = SchedNoteOn !Pitch !Velocity !Timbre
     | SchedNoteOff !Pitch
     deriving (Eq, Show)
 
@@ -73,7 +74,7 @@ schedulerThread audioVar schedVar = forever $ do
 
 applyAction :: TVar AudioState -> Double -> ScheduledEvent -> STM ()
 applyAction audioVar currentTime event = case event.action of
-    SchedNoteOn p vel -> modifyAudioPool $ poolNoteOn currentTime p vel
+    SchedNoteOn p vel t -> modifyAudioPool $ poolNoteOn currentTime p vel t
     SchedNoteOff p -> modifyAudioPool $ poolNoteOff currentTime p
   where
     modifyAudioPool f = modifyTVar' audioVar (\s -> s{pool = f s.pool})
@@ -85,7 +86,7 @@ eventsFromStream st fromBeat toBeat =
 
 eventToActions :: Tempo -> Double -> Event Note -> [ScheduledEvent]
 eventToActions t start (Event b (Note p d v)) =
-    [ ScheduledEvent (start + beatToSeconds t (unBeat b)) (SchedNoteOn p v)
+    [ ScheduledEvent (start + beatToSeconds t (unBeat b)) (SchedNoteOn p v defaultTimbre)
     , ScheduledEvent (start + beatToSeconds t (unBeat b + unDuration d)) (SchedNoteOff p)
     ]
 
