@@ -20,12 +20,11 @@ tests =
         , testCase "getPad out-of-bounds yields Nothing" $
             getPad 10 10 (emptyGrid 4 4) @?= Nothing
         , testCase "emptyGrid records its dimensions" $ do
-            gridWidth (emptyGrid 5 3) @?= 5
-            gridHeight (emptyGrid 5 3) @?= 3
+            (emptyGrid 5 3).width @?= 5
+            (emptyGrid 5 3).height @?= 3
         , testCase "emptyGrid pads are all NoAction/Off" $
             let g = emptyGrid 4 4
-                pads = concat (gridPads g)
-             in assertBool "all default" (all (== Pad NoAction Off) pads)
+             in assertBool "all default" (all (== Pad NoAction Off) (concat g.pads))
         , testCase "setPad then getPad round-trips" $
             let pad = Pad (TriggerPattern 3) Blue
                 g = setPad 2 1 pad (emptyGrid 4 4)

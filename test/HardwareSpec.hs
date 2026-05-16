@@ -6,6 +6,7 @@ import Data.Bits (shiftL, (.|.))
 import Data.Word (Word8)
 import Foreign.C.Types (CLong)
 import Funktor.Audio.Scheduler (SchedulerAction (..))
+import Funktor.Audio.Timbre (defaultTimbre)
 import Funktor.Core.Types (Pitch (..), Velocity (..))
 import Funktor.Hardware.MIDI (
     MidiMessage (..),
@@ -45,13 +46,13 @@ routerTests =
         "midiToSchedAction"
         [ testCase "NoteOn routes to SchedNoteOn" $
             midiToSchedAction (NoteOn 0 (Pitch 60) (Velocity 1))
-                @?= Just (SchedNoteOn (Pitch 60) (Velocity 1))
+                @?= Just (SchedNoteOn (Pitch 60) (Velocity 1) defaultTimbre)
         , testCase "NoteOff routes to SchedNoteOff" $
             midiToSchedAction (NoteOff 5 (Pitch 64) (Velocity 0))
                 @?= Just (SchedNoteOff (Pitch 64))
         , testCase "Channel is ignored (mono collapse)" $
             midiToSchedAction (NoteOn 7 (Pitch 60) (Velocity 0.5))
-                @?= Just (SchedNoteOn (Pitch 60) (Velocity 0.5))
+                @?= Just (SchedNoteOn (Pitch 60) (Velocity 0.5) defaultTimbre)
         , testCase "ControlChange drops to Nothing" $
             midiToSchedAction (ControlChange 0 7 100) @?= Nothing
         , testCase "PitchBend drops to Nothing" $
@@ -155,14 +156,14 @@ stepRxTests =
         [ testCase "single-event sysex in one packet" $
             let evs = [event [0xF0, 0x7E, 0x06, 0xF7]]
                 (msgs, st) = stepRx initialRxState evs
-             in (msgs, rxInSysEx st) @?= ([SysEx [0x7E, 0x06]], False)
+             in (msgs, st.inSysEx) @?= ([SysEx [0x7E, 0x06]], False)
         , testCase "multi-packet sysex reassembles in order" $
             let evs =
                     [ event [0xF0, 0x7E, 0x06, 0x01]
                     , event [0x02, 0x03, 0xF7, 0x00]
                     ]
                 (msgs, st) = stepRx initialRxState evs
-             in (msgs, rxInSysEx st)
+             in (msgs, st.inSysEx)
                     @?= ([SysEx [0x7E, 0x06, 0x01, 0x02, 0x03]], False)
         , testCase "real-time status interleaved mid-sysex" $
             let evs =

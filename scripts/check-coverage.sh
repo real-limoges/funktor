@@ -37,19 +37,23 @@ REPORT=$(hpc report "$TIX" \
 # Tuned to current coverage with ~5% regression margin. Stubbed modules are
 # intentionally omitted; their bodies are `undefined` so coverage is meaningless.
 declare -a THRESHOLDS=(
-    "Funktor.Audio:50"
-    "Funktor.Audio.Effects:55"
-    "Funktor.Audio.Envelope:95"
-    "Funktor.Audio.Oscillator:90"
-    "Funktor.Audio.Scheduler:5"
-    "Funktor.Audio.State:85"
-    "Funktor.Audio.Voice:85"
-    "Funktor.Core.Pattern:75"
+    "Funktor.Audio.Scheduler:60"
+    "Funktor.Audio.Timbre:90"
     "Funktor.Core.Stream:78"
     "Funktor.Core.Types:80"
+    "Funktor.Generative.CellularAutomata:85"
+    "Funktor.Generative.Euclidean:90"
+    "Funktor.Generative.Markov:80"
     "Funktor.Grid:90"
+    "Funktor.Grid.Binding:40"
     "Funktor.Hardware.MIDI:40"
+    "Funktor.Hardware.Launchpad:80"
     "Funktor.Harmony:95"
+    "Funktor.Harmony.Analysis:80"
+    "Funktor.Harmony.Voicing:80"
+    "Funktor.Live.Reload:10"
+    "Funktor.Live.Session:60"
+    "Funktor.UI:50"
 )
 
 fail=0
